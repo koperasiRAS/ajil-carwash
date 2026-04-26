@@ -71,6 +71,6 @@ export async function GET(request: NextRequest) {
     total,
     page,
     totalPages: Math.ceil(total / limit),
-    users: users.map((u) => u.user).filter(Boolean),
+    users: users.map((u: { user: { id: string; name: string } | null }) => u.user).filter(Boolean),
   })
 }
