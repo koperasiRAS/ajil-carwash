@@ -1,0 +1,209 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-inter);
+  
+  --color-primary: var(--primary);
+  --color-primary-foreground: #ffffff;
+  --color-primary-dark: var(--primary-dark);
+  
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-neutral: var(--neutral);
+  
+  --color-sidebar-ring: var(--primary);
+  --color-sidebar-border: var(--border);
+  --color-sidebar-accent-foreground: var(--foreground);
+  --color-sidebar-accent: var(--accent);
+  --color-sidebar-primary-foreground: #ffffff;
+  --color-sidebar-primary: var(--primary);
+  --color-sidebar-foreground: var(--foreground);
+  --color-sidebar: var(--background);
+  
+  --color-ring: var(--primary);
+  --color-input: var(--border);
+  --color-border: var(--border);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: #ffffff;
+  
+  --color-accent-foreground: var(--foreground);
+  --color-accent: var(--muted);
+  --color-muted-foreground: var(--neutral);
+  --color-muted: #e5e7eb;
+  
+  --color-secondary-foreground: var(--foreground);
+  --color-secondary: var(--muted);
+  
+  --color-popover-foreground: var(--foreground);
+  --color-popover: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-card: var(--card);
+  
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: #f9fafb;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --popover: #ffffff;
+  --popover-foreground: #111827;
+  
+  --primary: #1a56db;
+  --primary-dark: #1e429f;
+  
+  --success: #057a55;
+  --danger: #e02424;
+  --warning: #d03801;
+  --neutral: #374151;
+  
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #1a56db;
+  --radius: 0.5rem;
+  
+  --sidebar: #f9fafb;
+  --sidebar-foreground: #111827;
+  --sidebar-primary: #1a56db;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f3f4f6;
+  --sidebar-accent-foreground: #111827;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: #1a56db;
+}
+
+.dark {
+  --background: #111827;
+  --foreground: #f9fafb;
+  --card: #1f2937;
+  --card-foreground: #f9fafb;
+  --popover: #1f2937;
+  --popover-foreground: #f9fafb;
+  
+  --primary: #1a56db;
+  --primary-dark: #1e429f;
+  
+  --success: #057a55;
+  --danger: #e02424;
+  --warning: #d03801;
+  --neutral: #9ca3af;
+  
+  --border: #374151;
+  --input: #374151;
+  --ring: #1a56db;
+  
+  --sidebar: #1f2937;
+  --sidebar-foreground: #f9fafb;
+  --sidebar-primary: #1a56db;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #374151;
+  --sidebar-accent-foreground: #f9fafb;
+  --sidebar-border: #374151;
+  --sidebar-ring: #1a56db;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+
+  /* Headings */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight;
+  }
+
+  /* Body text */
+  p, span, div {
+    @apply font-normal leading-relaxed;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.5);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(107, 114, 128, 0.8);
+  }
+
+  /* Selection color */
+  ::selection {
+    background: rgba(26, 86, 219, 0.3);
+    color: inherit;
+  }
+
+  /* Focus ring */
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+}
+
+/* ── Shared utility classes ── */
+
+/* Card surface */
+.card {
+  @apply bg-card border border-border rounded-xl;
+}
+
+/* Page padding */
+.page-content {
+  @apply p-4 lg:p-6;
+}
+
+/* Section header */
+.section-header {
+  @apply text-lg font-bold tracking-tight mb-4;
+}
+
+/* ── Loading skeletons ── */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.skeleton {
+  @apply bg-muted rounded animate-[skeleton-pulse_1.5s_ease-in-out_infinite];
+}
+
+/* ── Receipt / thermal printer ── */
+@media print {
+  .receipt {
+    max-width: 300px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .receipt * {
+    overflow: hidden;
+  }
+}

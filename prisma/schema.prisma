@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  KASIR
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum TransactionStatus {
+  COMPLETED
+  VOIDED
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  QRIS
+}
+
+enum VehicleType {
+  MOTOR
+  MOBIL
+  PICKUP
+  TRUK
+}
+
+enum StockLogType {
+  IN
+  OUT
+  ADJUSTMENT
+}
+
+enum ExpenseCategory {
+  OPERASIONAL
+  GAJI
+  SABUN_CHEMICAL
+  LISTRIK_AIR
+  PERALATAN
+  LAINNYA
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(KASIR)
+  pin       String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shifts      Shift[]
+  transactions Transaction[]
+  expenses    Expense[]
+  auditLogs   AuditLog[]
+  voidedTx    Transaction[] @relation("VoidedBy")
+}
+
+model Service {
+  id              String   @id @default(uuid())
+  name            String
+  description     String?
+  price           Int
+  category        VehicleType
+  durationMinutes Int      @default(30)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  transactionItems TransactionItem[]
+}
+
+model Shift {
+  id           String      @id @default(uuid())
+  kasirId      String
+  openingCash  Int
+  closingCash  Int?
+  expectedCash Int?
+  actualCash   Int?
+  difference   Int?
+  status       ShiftStatus @default(OPEN)
+  note         String?
+  openedAt     DateTime    @default(now())
+  closedAt     DateTime?
+
+  kasir        User          @relation(fields: [kasirId], references: [id])
+  transactions Transaction[]
+  expenses     Expense[]
+}
+
+model Transaction {
+  id              String            @id @default(uuid())
+  invoiceNumber   String            @unique
+  shiftId         String
+  kasirId         String
+  customerName    String?
+  vehicleType     VehicleType
+  vehiclePlate    String?
+  paymentMethod   PaymentMethod
+  subtotal        Int
+  discount        Int               @default(0)
+  total           Int
+  paymentAmount   Int
+  change          Int               @default(0)
+  status          TransactionStatus @default(COMPLETED)
+  voidReason      String?
+  voidById        String?
+  voidAt          DateTime?
+  createdAt       DateTime          @default(now())
+
+  shift   Shift             @relation(fields: [shiftId], references: [id])
+  kasir   User              @relation(fields: [kasirId], references: [id])
+  voidBy  User?             @relation("VoidedBy", fields: [voidById], references: [id])
+  items   TransactionItem[]
+}
+
+model TransactionItem {
+  id            String @id @default(uuid())
+  transactionId String
+  serviceId     String
+  serviceName   String
+  price         Int
+  quantity      Int    @default(1)
+  subtotal      Int
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  service     Service     @relation(fields: [serviceId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  userName  String
+  action    String
+  entity    String
+  entityId  String?
+  oldData   Json?
+  newData   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Expense {
+  id          String          @id @default(uuid())
+  kasirId     String
+  shiftId     String
+  category    ExpenseCategory
+  description String
+  amount      Int
+  approvedBy  String?
+  createdAt   DateTime        @default(now())
+
+  kasir User  @relation(fields: [kasirId], references: [id])
+  shift Shift @relation(fields: [shiftId], references: [id])
+}
+
+model StockItem {
+  id           String   @id @default(uuid())
+  name         String
+  unit         String
+  currentStock Float    @default(0)
+  minStock     Float    @default(5)
+  pricePerUnit Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  logs StockLog[]
+}
+
+model StockLog {
+  id            String       @id @default(uuid())
+  itemId        String
+  type          StockLogType
+  quantity      Float
+  previousStock Float
+  currentStock  Float
+  referenceId   String?
+  note          String?
+  userId        String
+  createdAt     DateTime     @default(now())
+
+  item StockItem @relation(fields: [itemId], references: [id])
+}
