@@ -5,19 +5,16 @@ import { createClient } from '@/lib/supabase/server'
 export const dynamic = 'force-dynamic'
 
 // ── Auth helper ────────────────────────────────────────────────────────
-async function authOwner() {
+async function authUser() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-  const role = user.user_metadata?.role as string
-  if (role !== 'OWNER') return null
   return user
 }
 
 // ── GET ────────────────────────────────────────────────────────────────
 export async function GET(request: NextRequest) {
-  const owner = await authOwner()
-  if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await authUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = request.nextUrl
   const from = searchParams.get('from')

@@ -7,11 +7,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Role {
-  OWNER
-  KASIR
-}
-
 enum ShiftStatus {
   OPEN
   CLOSED
@@ -55,8 +50,7 @@ model User {
   name      String
   email     String   @unique
   password  String
-  role      Role     @default(KASIR)
-  pin       String?
+  pin       String   @unique
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

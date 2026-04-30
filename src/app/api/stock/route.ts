@@ -189,7 +189,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Generic update (name, unit, minStock, pricePerUnit)
-    const { id, _intent, ...data } = body
+    const { id, ...data } = body
     if (!id) return NextResponse.json({ error: 'ID wajib diisi' }, { status: 400 })
 
     const parsed = UpdateItemSchema.safeParse(data)

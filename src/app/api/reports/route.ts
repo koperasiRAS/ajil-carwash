@@ -80,9 +80,6 @@ export async function GET(request: NextRequest) {
 
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const role = user.user_metadata?.role as string
-    if (role !== 'OWNER') return NextResponse.json({ error: 'Hanya owner' }, { status: 403 })
-
     const { searchParams } = request.nextUrl
     const raw = Object.fromEntries(searchParams.entries())
     const parsed = QuerySchema.safeParse(raw)

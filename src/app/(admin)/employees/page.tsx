@@ -21,7 +21,6 @@ interface Employee {
   id: string
   name: string
   email: string
-  role: 'KASIR'
   pin: string | null
   isActive: boolean
   createdAt: string
@@ -32,7 +31,6 @@ interface EmployeeDetail {
   id: string
   name: string
   email: string
-  role: string
   pin: string | null
   isActive: boolean
   createdAt: string
@@ -114,8 +112,8 @@ export default function EmployeesPage() {
       if (!form.email.trim() || !form.email.includes('@')) { setFormError('Email valid wajib diisi'); return }
       if (!form.password || form.password.length < 8) { setFormError('Password minimal 8 karakter'); return }
     }
-    if (!editingEmp && !form.pin.match(/^\d{4}$/)) { setFormError('PIN harus 4 digit angka'); return }
-    if (editingEmp && form.pin && !form.pin.match(/^\d{4}$/)) { setFormError('PIN harus 4 digit angka'); return }
+    if (!editingEmp && !form.pin.match(/^\d{4,6}$/)) { setFormError('PIN harus 4-6 digit angka'); return }
+    if (editingEmp && form.pin && !form.pin.match(/^\d{4,6}$/)) { setFormError('PIN harus 4-6 digit angka'); return }
 
     setSaving(true)
     try {
@@ -138,7 +136,6 @@ export default function EmployeesPage() {
             email: form.email.trim().toLowerCase(),
             password: form.password,
             pin: form.pin,
-            role: 'KASIR',
           }),
         })
         const json = await res.json()
@@ -357,9 +354,9 @@ export default function EmployeesPage() {
                     className="bg-gray-800 border-gray-700 text-white" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">PIN Kasir * (4 digit)</label>
-                  <Input value={form.pin} onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
-                    placeholder="1234" maxLength={4} className="bg-gray-800 border-gray-700 text-white font-mono" />
+                  <label className="text-xs text-gray-500 block mb-1">PIN * (4-6 digit)</label>
+                  <Input value={form.pin} onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+                    placeholder="4-6 digit" maxLength={6} className="bg-gray-800 border-gray-700 text-white font-mono" />
                 </div>
               </>
             )}
@@ -367,8 +364,8 @@ export default function EmployeesPage() {
               <>
                 <div>
                   <label className="text-xs text-gray-500 block mb-1">PIN Baru (kosongkan jika tidak diubah)</label>
-                  <Input value={form.pin} onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
-                    placeholder="4 digit" maxLength={4} className="bg-gray-800 border-gray-700 text-white font-mono" />
+                  <Input value={form.pin} onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+                    placeholder="4-6 digit" maxLength={6} className="bg-gray-800 border-gray-700 text-white font-mono" />
                 </div>
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-gray-400">Karyawan Aktif</p>

@@ -182,13 +182,13 @@ export default function SettingsPage() {
 
       <div>
         <div className="flex gap-1 bg-gray-900 p-1 rounded-lg w-fit mb-4">
-          {(['PROFIL', 'KASIR', 'NOTIFIKASI', 'BACKUP'] as const).map((tab) => (
+          {(['PROFIL', 'TRANSAKSI', 'NOTIFIKASI', 'BACKUP'] as const).map((tab) => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                 activeTab === tab ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'
               }`}>
               {tab === 'PROFIL' ? 'Profil Usaha' :
-               tab === 'KASIR' ? 'Pengaturan Kasir' :
+               tab === 'TRANSAKSI' ? 'Pengaturan Transaksi' :
                tab === 'NOTIFIKASI' ? 'Notifikasi' : 'Backup Data'}
             </button>
           ))}
@@ -222,7 +222,7 @@ export default function SettingsPage() {
         )}
 
         {/* ── Tab: Pengaturan Kasir ── */}
-        {activeTab === 'KASIR' && (
+        {activeTab === 'TRANSAKSI' && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-5 max-w-xl">
             <p className="text-xs text-gray-500 uppercase tracking-wider">Pengaturan perilaku kasir saat bertransaksi</p>
             <div className="space-y-4">

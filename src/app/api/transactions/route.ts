@@ -24,14 +24,12 @@ export async function GET(request: NextRequest) {
   const limit = 20
   const skip = (page - 1) * limit
 
-  const role = user.user_metadata?.role as string
   const kasirId = searchParams.get('kasirId')
   const status = searchParams.get('status')
   const from = searchParams.get('from')
   const to = searchParams.get('to')
 
   const where: Record<string, unknown> = {}
-  if (role === 'KASIR') where.kasirId = user.id
   if (kasirId) where.kasirId = kasirId
   if (status) where.status = status
   if (from || to) {
@@ -85,11 +83,6 @@ export async function POST(request: NextRequest) {
   const user = await authUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const role = user.user_metadata?.role as string
-  if (role !== 'KASIR' && role !== 'OWNER') {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-  }
-
   try {
     const body = await request.json()
     const parsed = CreateTxSchema.safeParse(body)
@@ -103,11 +96,6 @@ export async function POST(request: NextRequest) {
     const shift = await prisma.shift.findUnique({ where: { id: data.shiftId } })
     if (!shift || shift.status !== 'OPEN') {
       return NextResponse.json({ error: 'Shift tidak ditemukan atau belum dibuka' }, { status: 400 })
-    }
-
-    // Kasir can only create tx in their own shift
-    if (role === 'KASIR' && shift.kasirId !== user.id) {
-      return NextResponse.json({ error: 'Tidak bisa bikin transaksi di shift orang lain' }, { status: 403 })
     }
 
     // Generate unique invoice

@@ -22,7 +22,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
+          cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value)
           })
           request.nextUrl.pathname = pathname
@@ -31,18 +31,13 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  const { data: { user } } = await supabase.auth.getUser()
   const isLoggedIn = !!user
 
   // /login → redirect if already authenticated
   if (pathname === '/login') {
     if (isLoggedIn) {
-      const role = (user?.user_metadata?.role as string) ?? 'KASIR'
-      const redirectUrl = role === 'OWNER' ? '/dashboard' : '/kasir'
-      return NextResponse.redirect(new URL(redirectUrl, request.url))
+      return NextResponse.redirect(new URL('/dashboard', request.url))
     }
     return NextResponse.next()
   }
@@ -50,23 +45,6 @@ export async function middleware(request: NextRequest) {
   // Unauthenticated → /login
   if (!isLoggedIn) {
     return NextResponse.redirect(new URL('/login', request.url))
-  }
-
-  const role = (user?.user_metadata?.role as string) ?? 'KASIR'
-
-  // Owner-only routes
-  const ownerRoutes = [
-    '/dashboard', '/transactions', '/reports', '/services',
-    '/employees', '/shifts', '/stock', '/expenses', '/settings',
-  ]
-  if (ownerRoutes.some((r) => pathname.startsWith(r)) && role !== 'OWNER') {
-    return NextResponse.redirect(new URL('/kasir', request.url))
-  }
-
-  // Kasir routes — both KASIR and OWNER allowed
-  const kasirRoutes = ['/kasir', '/shift']
-  if (kasirRoutes.some((r) => pathname.startsWith(r))) {
-    return NextResponse.next()
   }
 
   return NextResponse.next()

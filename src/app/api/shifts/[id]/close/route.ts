@@ -17,8 +17,6 @@ export async function POST(
 
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const role = user.user_metadata?.role as string
-
   try {
     const body = await request.json()
     const { actualCash, note } = body
@@ -38,7 +36,7 @@ export async function POST(
     if (!shift) return NextResponse.json({ error: 'Shift tidak ditemukan' }, { status: 404 })
 
     // Auth: kasir owns shift, or owner
-    if (shift.kasirId !== user.id && role !== 'OWNER') {
+    if (shift.kasirId !== user.id) {
       return NextResponse.json({ error: 'Tidak punya akses ke shift ini' }, { status: 403 })
     }
 

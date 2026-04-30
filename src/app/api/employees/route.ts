@@ -7,11 +7,9 @@ import { hash } from 'bcryptjs'
 
 export const dynamic = 'force-dynamic'
 
-async function authOwner() {
+async function authUser() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-  if ((user.user_metadata?.role as string) !== 'OWNER') return null
   return user
 }
 
@@ -19,25 +17,24 @@ const CreateSchema = z.object({
   name: z.string().min(1, 'Nama wajib diisi'),
   email: z.string().email('Email tidak valid'),
   password: z.string().min(8, 'Password minimal 8 karakter'),
-  pin: z.string().regex(/^\d{4}$/, 'PIN harus 4 digit angka'),
-  role: z.enum(['KASIR']).default('KASIR'),
+  pin: z.string().regex(/^\d{4,6}$/, 'PIN harus 4-6 digit angka'),
 })
 
 const UpdateSchema = z.object({
   name: z.string().min(1).optional(),
-  pin: z.string().regex(/^\d{4}$/).optional(),
+  pin: z.string().regex(/^\d{4,6}$/).optional(),
   isActive: z.boolean().optional(),
 })
 
 // ── GET ──────────────────────────────────────────────────────────────────
 export async function GET(request: NextRequest) {
-  const owner = await authOwner()
-  if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await authUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = request.nextUrl
   const isActive = searchParams.get('isActive')
 
-  const where: Record<string, unknown> = { role: 'KASIR' as const }
+  const where: Record<string, unknown> = {}
   if (isActive !== null && isActive !== '') where.isActive = isActive === 'true'
 
   const employees = await prisma.user.findMany({
@@ -47,7 +44,6 @@ export async function GET(request: NextRequest) {
       id: true,
       name: true,
       email: true,
-      role: true,
       pin: true,
       isActive: true,
       createdAt: true,
@@ -60,8 +56,8 @@ export async function GET(request: NextRequest) {
 
 // ── POST ─────────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
-  const owner = await authOwner()
-  if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await authUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
     const body = await request.json()
@@ -71,29 +67,31 @@ export async function POST(request: NextRequest) {
     const existing = await prisma.user.findUnique({ where: { email: parsed.data.email } })
     if (existing) return NextResponse.json({ error: 'Email sudah terdaftar' }, { status: 409 })
 
+    const existingPin = await prisma.user.findUnique({ where: { pin: parsed.data.pin } })
+    if (existingPin) return NextResponse.json({ error: 'PIN sudah digunakan' }, { status: 409 })
+
     const hashedPassword = await hash(parsed.data.password, 12)
 
-    const user = await prisma.user.create({
+    const newUser = await prisma.user.create({
       data: {
         name: parsed.data.name,
         email: parsed.data.email,
         password: hashedPassword,
         pin: parsed.data.pin,
-        role: parsed.data.role,
         isActive: true,
       },
     })
 
     await createAuditLog({
-      userId: owner.id,
-      userName: owner.user_metadata?.name as string ?? 'Owner',
+      userId: user.id,
+      userName: user.user_metadata?.name as string ?? 'Admin',
       action: 'EMPLOYEE_CREATE',
       entity: 'User',
-      entityId: user.id,
-      newData: { name: parsed.data.name, email: parsed.data.email, role: parsed.data.role },
+      entityId: newUser.id,
+      newData: { name: parsed.data.name, email: parsed.data.email },
     })
 
-    return NextResponse.json({ id: user.id, name: user.name, email: user.email, role: user.role, isActive: user.isActive }, { status: 201 })
+    return NextResponse.json({ id: newUser.id, name: newUser.name, email: newUser.email, isActive: newUser.isActive }, { status: 201 })
   } catch (error) {
     console.error('Create employee error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -102,8 +100,8 @@ export async function POST(request: NextRequest) {
 
 // ── PUT ──────────────────────────────────────────────────────────────────
 export async function PUT(request: NextRequest) {
-  const owner = await authOwner()
-  if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await authUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
     const body = await request.json()
@@ -113,18 +111,23 @@ export async function PUT(request: NextRequest) {
     const existing = await prisma.user.findUnique({ where: { id } })
     if (!existing) return NextResponse.json({ error: 'Karyawan tidak ditemukan' }, { status: 404 })
 
+    if (data.pin && data.pin !== existing.pin) {
+      const pinTaken = await prisma.user.findUnique({ where: { pin: data.pin } })
+      if (pinTaken) return NextResponse.json({ error: 'PIN sudah digunakan orang lain' }, { status: 409 })
+    }
+
     const parsed = UpdateSchema.safeParse(data)
     if (!parsed.success) return NextResponse.json({ error: parsed.error.message }, { status: 400 })
 
     const updated = await prisma.user.update({
       where: { id },
       data: parsed.data,
-      select: { id: true, name: true, email: true, role: true, pin: true, isActive: true },
+      select: { id: true, name: true, email: true, pin: true, isActive: true },
     })
 
     await createAuditLog({
-      userId: owner.id,
-      userName: owner.user_metadata?.name as string ?? 'Owner',
+      userId: user.id,
+      userName: user.user_metadata?.name as string ?? 'Admin',
       action: 'EMPLOYEE_UPDATE',
       entity: 'User',
       entityId: id,
@@ -141,8 +144,8 @@ export async function PUT(request: NextRequest) {
 
 // ── DELETE ───────────────────────────────────────────────────────────────
 export async function DELETE(request: NextRequest) {
-  const owner = await authOwner()
-  if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await authUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = request.nextUrl
   const id = searchParams.get('id')
@@ -150,14 +153,13 @@ export async function DELETE(request: NextRequest) {
 
   const existing = await prisma.user.findUnique({ where: { id } })
   if (!existing) return NextResponse.json({ error: 'Karyawan tidak ditemukan' }, { status: 404 })
-  if (existing.role === 'OWNER') return NextResponse.json({ error: 'Tidak bisa menghapus owner' }, { status: 403 })
 
   // Soft delete - deactivate
   await prisma.user.update({ where: { id }, data: { isActive: false } })
 
   await createAuditLog({
-    userId: owner.id,
-    userName: owner.user_metadata?.name as string ?? 'Owner',
+    userId: user.id,
+    userName: user.user_metadata?.name as string ?? 'Admin',
     action: 'EMPLOYEE_DELETE',
     entity: 'User',
     entityId: id,

@@ -7,12 +7,9 @@ import { createClient } from '@/lib/supabase/server'
 export const dynamic = 'force-dynamic'
 
 // ── Auth ───────────────────────────────────────────────────────────────
-async function authOwner() {
+async function authUser() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-  const role = user.user_metadata?.role as string
-  if (role !== 'OWNER') return null
   return user
 }
 
@@ -30,8 +27,8 @@ const UpdateSchema = CreateSchema.partial()
 
 // ── GET ─────────────────────────────────────────────────────────────────
 export async function GET(request: NextRequest) {
-  const owner = await authOwner()
-  if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await authUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = request.nextUrl
   const category = searchParams.get('category')
@@ -54,8 +51,8 @@ export async function GET(request: NextRequest) {
 
 // ── POST ─────────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
-  const owner = await authOwner()
-  if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await authUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
     const body = await request.json()
@@ -74,8 +71,8 @@ export async function POST(request: NextRequest) {
     const service = await prisma.service.create({ data: parsed.data })
 
     await createAuditLog({
-      userId: owner.id,
-      userName: owner.user_metadata?.name as string ?? 'Owner',
+      userId: user.id,
+      userName: user.user_metadata?.name as string ?? 'Admin',
       action: 'SERVICE_CREATE',
       entity: 'Service',
       entityId: service.id,
@@ -91,8 +88,8 @@ export async function POST(request: NextRequest) {
 
 // ── PUT ──────────────────────────────────────────────────────────────────
 export async function PUT(request: NextRequest) {
-  const owner = await authOwner()
-  if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await authUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
     const body = await request.json()
@@ -112,8 +109,8 @@ export async function PUT(request: NextRequest) {
       if (hasTx) {
         // Record price change in audit
         await createAuditLog({
-          userId: owner.id,
-          userName: owner.user_metadata?.name as string ?? 'Owner',
+          userId: user.id,
+          userName: user.user_metadata?.name as string ?? 'Admin',
           action: 'PRICE_CHANGE',
           entity: 'Service',
           entityId: id,
@@ -139,8 +136,8 @@ export async function PUT(request: NextRequest) {
 
 // ── DELETE ───────────────────────────────────────────────────────────────
 export async function DELETE(request: NextRequest) {
-  const owner = await authOwner()
-  if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await authUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = request.nextUrl
   const id = searchParams.get('id')
@@ -162,8 +159,8 @@ export async function DELETE(request: NextRequest) {
   await prisma.service.update({ where: { id }, data: { isActive: false } })
 
   await createAuditLog({
-    userId: owner.id,
-    userName: owner.user_metadata?.name as string ?? 'Owner',
+    userId: user.id,
+    userName: user.user_metadata?.name as string ?? 'Admin',
     action: 'SERVICE_DELETE',
     entity: 'Service',
     entityId: id,

@@ -6,13 +6,11 @@ export const dynamic = 'force-dynamic'
 
 // GET /api/shifts/active
 // Auth: KASIR — return own OPEN shift or null
-export async function GET(request: NextRequest) {
+export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const role = user.user_metadata?.role as string
 
   const shift = await prisma.shift.findFirst({
     where: {
@@ -52,9 +50,6 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const role = user.user_metadata?.role as string
-  if (role !== 'KASIR') return NextResponse.json({ error: 'Hanya kasir yang bisa buka shift' }, { status: 403 })
 
   try {
     const body = await request.json()

@@ -36,7 +36,7 @@ const CONFIG: Record<string, { label: string; className: string }> = {
   TRUK:     { label: 'Truk',   className: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-400 dark:border-amber-800' },
 }
 
-export function StatusBadge({ status, type = 'default', className }: StatusBadgeProps) {
+export function StatusBadge({ status, className }: StatusBadgeProps) {
   const config = CONFIG[status]
   if (!config) {
     return (

@@ -106,7 +106,6 @@ export default function TransactionsPage() {
     supabase
       .from('users')
       .select('id, name')
-      .eq('role', 'KASIR')
       .eq('is_active', true)
       .then(({ data }) => setKasirs((data ?? []) as Kasir[]))
   }, [])
@@ -311,7 +310,7 @@ export default function TransactionsPage() {
       t.payment_method,
       t.status,
     ])
-    // @ts-ignore
+    // @ts-expect-error jsPDF autoTable types
     doc.autoTable({
       head: [['No', 'Invoice', 'Tanggal', 'Kasir', 'Kendaraan', 'Total', 'Metode', 'Status']],
       body: rows,

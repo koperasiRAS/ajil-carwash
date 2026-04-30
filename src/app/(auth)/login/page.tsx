@@ -1,13 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/store/authStore'
-import { Eye, EyeOff, Car } from 'lucide-react'
+import { Car } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 const LOCKOUT_ATTEMPTS = 5
@@ -15,34 +12,36 @@ const LOCKOUT_DURATION_MS = 15 * 60 * 1000 // 15 minutes
 
 function getLoginAttempts(): { count: number; lockedUntil: number } {
   if (typeof window === 'undefined') return { count: 0, lockedUntil: 0 }
-  const raw = localStorage.getItem('login_attempts') || '{"count":0,"lockedUntil":0}'
+  const raw = localStorage.getItem('cw_login_attempts') || '{"count":0,"lockedUntil":0}'
   return JSON.parse(raw)
 }
 
 function setLoginAttempts(data: { count: number; lockedUntil: number }) {
-  localStorage.setItem('login_attempts', JSON.stringify(data))
+  localStorage.setItem('cw_login_attempts', JSON.stringify(data))
 }
 
 export default function LoginPage() {
   const router = useRouter()
   const setUser = useAuthStore((s) => s.setUser)
   const setActiveShift = useAuthStore((s) => s.setActiveShift)
-  const supabase = createClient()
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
+  const [pin, setPin] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [attempts, setAttempts] = useState(getLoginAttempts)
+  const [now, setNow] = useState(Date.now)
 
-  const isLocked =
-    attempts.lockedUntil > 0 && Date.now() < attempts.lockedUntil
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const isLocked = attempts.lockedUntil > 0 && now < attempts.lockedUntil
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     if (isLocked) {
-      const remaining = Math.ceil((attempts.lockedUntil - Date.now()) / 60000)
+      const remaining = Math.ceil((attempts.lockedUntil - now) / 60000)
       setError(`Terlalu banyak percobaan. Coba lagi dalam ${remaining} menit.`)
       return
     }
@@ -51,83 +50,29 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      // 1. Sign in with Supabase Auth
-      const { data: authData, error: authError } =
-        await supabase.auth.signInWithPassword({ email, password })
-
-      if (authError || !authData.user) {
-        handleFailedAttempt()
-        setError('Email atau password salah.')
-        return
-      }
-
-      // 2. Get user role from users table
-      const userId = authData.user.id
-      const { data: dbUser, error: dbError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single()
-
-      if (dbError || !dbUser) {
-        await supabase.auth.signOut()
-        setError('Akun tidak ditemukan.')
-        return
-      }
-
-      // 3. Check if active
-      if (!dbUser.is_active) {
-        await supabase.auth.signOut()
-        setError('Akun dinonaktifkan. Hubungi owner.')
-        return
-      }
-
-      // 4. Reset attempt counter on success
-      setLoginAttempts({ count: 0, lockedUntil: 0 })
-
-      // 5. Check if user has open shift (for KASIR)
-      let activeShiftId: string | null = null
-      if (dbUser.role === 'KASIR') {
-        const { data: openShift } = await supabase
-          .from('shifts')
-          .select('id')
-          .eq('kasir_id', userId)
-          .eq('status', 'OPEN')
-          .single()
-        activeShiftId = openShift?.id ?? null
-      }
-
-      // 6. Set auth store
-      setUser({
-        id: dbUser.id,
-        name: dbUser.name,
-        email: dbUser.email,
-        role: dbUser.role,
-        isActive: dbUser.is_active,
-      })
-      setActiveShift(activeShiftId)
-
-      // 7. Audit log — USER_LOGIN
-      await fetch('/api/auth/login-audit', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: dbUser.id,
-          userName: dbUser.name,
-          action: 'USER_LOGIN',
-          entity: 'User',
-          entityId: dbUser.id,
-        }),
-      }).catch(() => {}) // non-blocking
+        body: JSON.stringify({ pin }),
+      })
 
-      // 8. Redirect
-      if (dbUser.role === 'OWNER') {
-        router.push('/dashboard')
-      } else if (activeShiftId) {
-        router.push('/kasir')
-      } else {
-        router.push('/shift')
+      const data = await res.json()
+
+      if (!res.ok) {
+        handleFailedAttempt()
+        setError(data.error ?? 'PIN tidak valid')
+        return
       }
+
+      // Reset attempt counter
+      setLoginAttempts({ count: 0, lockedUntil: 0 })
+
+      // Set auth store
+      setUser(data.user)
+      setActiveShift(null)
+
+      // Redirect to dashboard
+      router.push(data.redirectTo ?? '/dashboard')
     } catch {
       setError('Terjadi kesalahan. Silakan coba lagi.')
     } finally {
@@ -148,6 +93,11 @@ export default function LoginPage() {
     }
   }
 
+  function handlePinChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 6)
+    setPin(val)
+  }
+
   return (
     <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
       <Card className="w-full max-w-md bg-neutral-900 border-neutral-800">
@@ -159,70 +109,48 @@ export default function LoginPage() {
           </div>
           <CardTitle className="text-2xl text-white">CarWash Manager</CardTitle>
           <CardDescription className="text-neutral-400">
-            Sistem Manajemen Car Wash
+            Masukkan PIN untuk masuk
           </CardDescription>
         </CardHeader>
 
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-5">
+            {/* PIN Input - big numeric keypad friendly */}
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-neutral-300">
-                Email
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="email@carwash.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                placeholder="● ● ● ●"
+                value={pin}
+                onChange={handlePinChange}
                 disabled={isLocked || loading}
-                className="bg-neutral-800 border-neutral-700 text-white placeholder:text-neutral-500"
+                autoFocus
+                className="w-full bg-neutral-800 border border-neutral-700 text-white text-center text-3xl tracking-[1em] px-4 py-4 rounded-lg placeholder:text-neutral-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-neutral-300">
-                Password
-              </Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  disabled={isLocked || loading}
-                  className="bg-neutral-800 border-neutral-700 text-white placeholder:text-neutral-500 pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
+              <p className="text-center text-xs text-neutral-500">
+                Masukkan 4-6 digit PIN Anda
+              </p>
             </div>
 
             {error && (
-              <div className="bg-red-900/30 border border-red-800 text-red-400 text-sm px-3 py-2 rounded-md">
+              <div className="bg-red-900/30 border border-red-800 text-red-400 text-sm px-3 py-2 rounded-md text-center">
                 {error}
               </div>
             )}
 
             {isLocked && (
-              <div className="bg-yellow-900/30 border border-yellow-800 text-yellow-400 text-sm px-3 py-2 rounded-md">
+              <div className="bg-yellow-900/30 border border-yellow-800 text-yellow-400 text-sm px-3 py-2 rounded-md text-center">
                 Akun terkunci sementara. Coba lagi dalam{' '}
-                {Math.ceil((attempts.lockedUntil - Date.now()) / 60000)} menit.
+                {Math.ceil((attempts.lockedUntil - now) / 60000)} menit.
               </div>
             )}
 
             <Button
               type="submit"
-              disabled={isLocked || loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white"
+              disabled={isLocked || loading || pin.length < 4}
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 text-base"
             >
               {loading ? 'Memproses...' : 'Masuk'}
             </Button>

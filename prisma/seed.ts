@@ -1,57 +1,30 @@
 import 'dotenv/config'
-import { PrismaClient, VehicleType, Role, ExpenseCategory } from '@prisma/client'
+import { PrismaClient, VehicleType } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { PrismaPg } from '@prisma/adapter-pg'
+import { Pool } from 'pg'
 
-const prisma = new PrismaClient({ log: ['info'] } as any)
+const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+const adapter = new PrismaPg(pool)
+const prisma = new PrismaClient({ adapter } as unknown as Record<string, unknown>)
 
 async function main() {
   console.log('Starting seed...')
 
-  // Create OWNER user
-  const ownerPassword = await bcrypt.hash('Owner123!', 10)
-  const owner = await prisma.user.upsert({
-    where: { email: 'owner@carwash.com' },
+  // Create Admin user
+  const adminPassword = await bcrypt.hash('Admin123!', 10)
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@carwash.com' },
     update: {},
     create: {
-      name: 'Owner Carwash',
-      email: 'owner@carwash.com',
-      password: ownerPassword,
-      role: Role.OWNER,
-      isActive: true,
-    },
-  })
-  console.log('Created owner:', owner.email)
-
-  // Create KASIR users
-  const kasir1Password = await bcrypt.hash('Kasir123!', 10)
-  const kasir1 = await prisma.user.upsert({
-    where: { email: 'kasir1@carwash.com' },
-    update: {},
-    create: {
-      name: 'Kasir Satu',
-      email: 'kasir1@carwash.com',
-      password: kasir1Password,
-      role: Role.KASIR,
+      name: 'Admin',
+      email: 'admin@carwash.com',
+      password: adminPassword,
       pin: '1234',
       isActive: true,
     },
   })
-  console.log('Created kasir 1:', kasir1.email)
-
-  const kasir2Password = await bcrypt.hash('Kasir123!', 10)
-  const kasir2 = await prisma.user.upsert({
-    where: { email: 'kasir2@carwash.com' },
-    update: {},
-    create: {
-      name: 'Kasir Dua',
-      email: 'kasir2@carwash.com',
-      password: kasir2Password,
-      role: Role.KASIR,
-      pin: '5678',
-      isActive: true,
-    },
-  })
-  console.log('Created kasir 2:', kasir2.email)
+  console.log('Created admin:', admin.email)
 
   // Create Services
   const services = [
@@ -71,17 +44,6 @@ async function main() {
     { name: 'Cuci Truk', description: 'Cuci truk', price: 75000, category: VehicleType.TRUK, durationMinutes: 60 },
   ]
 
-  for (const service of services) {
-    await prisma.service.upsert({
-      where: { id: service.name }, // won't match, upsert by unique field
-      update: {},
-      create: service,
-    }).catch(() => {
-      // If unique constraint fails, create without upsert
-    })
-  }
-
-  // Create services with unique name constraint fallback
   for (const service of services) {
     const existing = await prisma.service.findFirst({ where: { name: service.name } })
     if (!existing) {
@@ -110,9 +72,7 @@ async function main() {
   console.log('Seed completed!')
   console.log('')
   console.log('=== Login Credentials ===')
-  console.log('Owner: owner@carwash.com / Owner123!')
-  console.log('Kasir 1: kasir1@carwash.com / Kasir123! (PIN: 1234)')
-  console.log('Kasir 2: kasir2@carwash.com / Kasir123! (PIN: 5678)')
+  console.log('Admin: admin@carwash.com (PIN: 1234)')
 }
 
 main()

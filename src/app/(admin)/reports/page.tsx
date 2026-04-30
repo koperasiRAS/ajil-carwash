@@ -171,7 +171,7 @@ export default function ReportsPage() {
       ['Transaksi', `${data.summary.totalTx} (Void: ${data.summary.totalVoid})`],
       ['Rata-rata', formatRupiah(data.summary.avgPerTx)],
     ]
-    // @ts-ignore
+    // @ts-expect-error jsPDF autoTable types
     doc.autoTable({
       head: [['Ringkasan Finansial', '']],
       body: summaryRows,
@@ -180,17 +180,19 @@ export default function ReportsPage() {
     })
 
     if (data.byService.length > 0) {
-      // @ts-ignore
+      // @ts-expect-error jsPDF autoTable types
+       
       doc.autoTable({
         head: [['Layanan', 'Qty', 'Omzet', '%']],
         body: data.byService.map((s) => [s.name, s.count, formatRupiah(s.omzet), `${s.pct}%`]),
+         
         startY: (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8,
         styles: { fontSize: 8 },
       })
     }
 
     if (data.expenses.length > 0) {
-      // @ts-ignore
+      // @ts-expect-error jsPDF autoTable types
       doc.autoTable({
         head: [['Tanggal', 'Kategori', 'Deskripsi', 'Jumlah', 'Input Oleh']],
         body: data.expenses.map((e) => [e.createdAt.slice(0, 10), e.category, e.description, formatRupiah(e.amount), e.inputBy]),

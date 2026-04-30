@@ -21,11 +21,6 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userRole = user.user_metadata?.role as string
-    if (userRole !== 'OWNER') {
-      return NextResponse.json({ error: 'Hanya owner yang bisa void transaksi' }, { status: 403 })
-    }
-
     // Get full transaction data BEFORE void
     const { data: tx, error: fetchErr } = await supabase
       .from('transactions')

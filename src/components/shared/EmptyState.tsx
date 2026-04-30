@@ -1,7 +1,6 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import { ShoppingCart, FileX } from 'lucide-react'
 
 interface EmptyStateProps {
   icon?: React.ReactNode

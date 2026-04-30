@@ -7,7 +7,6 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/shared/EmptyState'
 
 interface Column<T> {
@@ -166,7 +165,7 @@ export function DataTable<T extends Record<string, unknown>>({
               onRowClick ? 'active:scale-[0.98] transition-transform cursor-pointer' : ''
             )}
           >
-            {visibleCols.map((col, index) => (
+            {visibleCols.map((col) => (
               <div key={col.key as string} className="flex justify-between items-start gap-2 text-sm">
                 <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider shrink-0 mt-0.5">
                   {col.header}

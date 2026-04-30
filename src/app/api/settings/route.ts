@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/prisma'
 import { createClient } from '@/lib/supabase/server'
 import { createAuditLog } from '@/lib/audit'
 
@@ -20,11 +19,9 @@ const DEFAULT_SETTINGS = {
   notifyOnLowStock: true,
 }
 
-async function authOwner() {
+async function authUser() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-  if ((user.user_metadata?.role as string) !== 'OWNER') return null
   return user
 }
 
@@ -46,8 +43,8 @@ function getEnvSettings() {
 
 // ── GET ────────────────────────────────────────────────────────────────
 export async function GET() {
-  const owner = await authOwner()
-  if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await authUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const settings = getEnvSettings()
   return NextResponse.json({ settings })
@@ -55,8 +52,8 @@ export async function GET() {
 
 // ── PUT ────────────────────────────────────────────────────────────────
 export async function PUT(request: NextRequest) {
-  const owner = await authOwner()
-  if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await authUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
     const body = await request.json()
@@ -70,8 +67,8 @@ export async function PUT(request: NextRequest) {
 
     if (changedKeys.length > 0) {
       await createAuditLog({
-        userId: owner.id,
-        userName: owner.user_metadata?.name as string ?? 'Owner',
+        userId: user.id,
+        userName: user.user_metadata?.name as string ?? 'Admin',
         action: 'SETTING_CHANGE',
         entity: 'SystemSettings',
         entityId: 'global',

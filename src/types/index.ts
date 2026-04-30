@@ -1,4 +1,3 @@
-export type Role = 'OWNER' | 'KASIR'
 export type ShiftStatus = 'OPEN' | 'CLOSED'
 export type TransactionStatus = 'COMPLETED' | 'VOIDED'
 export type PaymentMethod = 'CASH' | 'TRANSFER' | 'QRIS'
@@ -36,8 +35,7 @@ export type AuditAction =
 export interface User {
   id: string
   name: string
-  email: string
-  role: Role
+  email?: string
   isActive: boolean
 }
 

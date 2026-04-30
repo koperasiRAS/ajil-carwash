@@ -46,14 +46,13 @@ export function ExportButton({ data, filename, sheets, className }: ExportButton
     try {
       const { default: jsPDF } = await import('jspdf')
       const doc = new jsPDF({ orientation: 'landscape' })
-      const pageW = doc.internal.pageSize.getWidth()
 
       if (data.length === 0) return
 
       const headers = Object.keys(data[0])
       const rows = data.map((row) => headers.map((h) => String(row[h] ?? '')))
 
-      // @ts-ignore
+      // @ts-expect-error jsPDF autoTable types mismatch with this version
       doc.autoTable({
         head: [headers],
         body: rows,
