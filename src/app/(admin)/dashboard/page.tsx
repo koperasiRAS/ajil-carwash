@@ -181,6 +181,7 @@ export default function DashboardPage() {
       .select('id, kasir_id, users(name), opened_at, opening_cash')
       .eq('status', 'OPEN')
     const activeList = (openShifts ?? []).map((s) => ({
+      id: s.id,
       kasirId: s.kasir_id,
       kasirName: (s.users as unknown as { name: string })?.name ?? 'Unknown',
       openedAt: s.opened_at,
@@ -194,11 +195,11 @@ export default function DashboardPage() {
       const { data: shiftTx } = await supabase
         .from('transactions')
         .select('total')
-        .eq('shift_id', shift.kasirId) // using kasirId as placeholder - need to match by id
+        .eq('shift_id', shift.id)
         .eq('status', 'COMPLETED')
       const txOfShift = shiftTx ?? []
       summaries.push({
-        id: shift.kasirId,
+        id: shift.id,
         kasirName: shift.kasirName,
         openedAt: shift.openedAt,
         openingCash: shift.openingCash,
@@ -224,7 +225,7 @@ export default function DashboardPage() {
       .select(`
         id, invoice_number, vehicle_type, total, payment_method, created_at, status,
         users!kasir_id(name),
-        transaction_items(service_name)
+        transaction_items(service_name, price, quantity, subtotal)
       `)
       .eq('status', 'COMPLETED')
       .order('created_at', { ascending: false })
@@ -235,7 +236,7 @@ export default function DashboardPage() {
         invoiceNumber: t.invoice_number,
         kasirName: (t.users as unknown as { name: string })?.name ?? '-',
         vehicleType: t.vehicle_type,
-        items: (t.transaction_items ?? []).map((i: { service_name: string }) => ({ serviceName: i.service_name })),
+        items: (t.transaction_items ?? []).map((i: { service_name: string; price: number; quantity: number; subtotal: number }) => ({ serviceName: i.service_name, price: i.price, quantity: i.quantity, subtotal: i.subtotal })),
         total: t.total,
         paymentMethod: t.payment_method,
         createdAt: t.created_at,
@@ -542,8 +543,8 @@ export default function DashboardPage() {
                 <div className="space-y-1">
                   {selectedTx.items.map((item, i) => (
                     <div key={i} className="flex justify-between text-sm">
-                      <span className="text-gray-300">{item.serviceName}</span>
-                      <span className="text-gray-400">{formatRupiah(0)}</span>
+                      <span className="text-gray-300">{item.serviceName}{(item as any).quantity > 1 ? ` x${(item as any).quantity}` : ''}</span>
+                      <span className="text-gray-400">{formatRupiah((item as any).subtotal ?? (item as any).price ?? 0)}</span>
                     </div>
                   ))}
                 </div>

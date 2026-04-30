@@ -4,10 +4,12 @@ import { createServerClient } from '@supabase/ssr'
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Skip static files
+  // Skip static files, API routes, and root path
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon') ||
+    pathname.startsWith('/api/') ||
+    pathname === '/' ||
     pathname.includes('.')
   ) {
     return NextResponse.next()

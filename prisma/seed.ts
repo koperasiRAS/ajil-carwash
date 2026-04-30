@@ -20,7 +20,7 @@ async function main() {
       name: 'Admin',
       email: 'admin@carwash.com',
       password: adminPassword,
-      pin: '1234',
+      pin: '123456',
       isActive: true,
     },
   })
@@ -72,7 +72,7 @@ async function main() {
   console.log('Seed completed!')
   console.log('')
   console.log('=== Login Credentials ===')
-  console.log('Admin: admin@carwash.com (PIN: 1234)')
+  console.log('Admin: admin@carwash.com (PIN: 123456)')
 }
 
 main()
