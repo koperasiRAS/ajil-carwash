@@ -87,14 +87,13 @@ export default function SettingsPage() {
     setClearing(true)
     setClearError('')
     try {
-      const res = await fetch('/api/debug/clear-all', { method: 'POST' })
-      if (!res.ok) throw new Error('Gagal menghapus data')
-      alert('Semua data transaksi berhasil dihapus!')
-      setClearConfirm2(false)
-      setClearConfirm(false)
+      const res = await fetch('/api/transactions/clear-all', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Gagal menghapus data')
+      // Redirect to dashboard to confirm fresh state
+      window.location.href = '/dashboard'
     } catch (err) {
       setClearError(err instanceof Error ? err.message : 'Gagal menghapus data')
-    } finally {
       setClearing(false)
     }
   }
