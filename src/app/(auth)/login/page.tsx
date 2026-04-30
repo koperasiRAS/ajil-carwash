@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
+import { SESSION_COOKIE_NAME } from '@/lib/auth'
 import { Car } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -23,7 +24,6 @@ function setLoginAttempts(data: { count: number; lockedUntil: number }) {
 export default function LoginPage() {
   const router = useRouter()
   const setUser = useAuthStore((s) => s.setUser)
-  const setActiveShift = useAuthStore((s) => s.setActiveShift)
 
   const [pin, setPin] = useState('')
   const [loading, setLoading] = useState(false)
@@ -69,7 +69,6 @@ export default function LoginPage() {
 
       // Set auth store
       setUser(data.user)
-      setActiveShift(null)
 
       // Redirect to dashboard
       router.push(data.redirectTo ?? '/dashboard')

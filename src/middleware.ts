@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
+import { verifySession, SESSION_COOKIE_NAME } from '@/lib/auth'
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -15,26 +15,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => {
-            request.cookies.set(name, value)
-          })
-          request.nextUrl.pathname = pathname
-        },
-      },
-    }
-  )
-
-  const { data: { user } } = await supabase.auth.getUser()
-  const isLoggedIn = !!user
+  // Get session cookie
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value
+  const session = token ? await verifySession(token) : null
+  const isLoggedIn = !!session
 
   // /login → redirect if already authenticated
   if (pathname === '/login') {

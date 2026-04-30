@@ -1,117 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAuditLog } from '@/lib/audit'
-import { createClient } from '@/lib/supabase/server'
+import prisma from '@/lib/prisma'
+import { verifySession, SESSION_COOKIE_NAME } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+async function getSession(request: NextRequest) {
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value
+  if (!token) return null
+  return verifySession(token)
+}
+
+interface RouteContext {
+  params: Promise<{ id: string }>
+}
+
+export async function POST(request: NextRequest, context: RouteContext) {
+  const session = await getSession(request)
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   try {
-    const { id: txId } = await params
-    const supabase = await createClient()
-
-    // Auth check — only OWNER
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Get full transaction data BEFORE void
-    const { data: tx, error: fetchErr } = await supabase
-      .from('transactions')
-      .select('*, transaction_items(*), users!kasir_id(*)')
-      .eq('id', txId)
-      .single()
-
-    if (fetchErr || !tx) {
-      return NextResponse.json({ error: 'Transaksi tidak ditemukan' }, { status: 404 })
-    }
-
-    if (tx.status === 'VOIDED') {
-      return NextResponse.json({ error: 'Transaksi sudah divoid sebelumnya' }, { status: 400 })
-    }
-
-    // Parse body
+    const { id } = await context.params
     const body = await request.json()
-    const { reasonType, reason } = body
+    const reason = body.reason as string
 
-    if (!reason || reason.trim().length < 20) {
-      return NextResponse.json({ error: 'Alasan void minimal 20 karakter' }, { status: 400 })
+    if (!reason || reason.length < 20) {
+      return NextResponse.json({ error: 'Alasan void minimal 20 karakter.' }, { status: 400 })
     }
 
-    const voidReason = `[${reasonType ?? 'LAINNYA'}] ${reason.trim()}`
-    const now = new Date().toISOString()
-
-    // Update transaction to VOIDED
-    const { error: updateErr } = await supabase
-      .from('transactions')
-      .update({
-        status: 'VOIDED',
-        void_reason: voidReason,
-        void_by_id: user.id,
-        void_at: now,
-      })
-      .eq('id', txId)
-
-    if (updateErr) {
-      return NextResponse.json({ error: 'Gagal mengupdate transaksi' }, { status: 500 })
+    // Get transaction
+    const tx = await prisma.transaction.findUnique({ where: { id } })
+    if (!tx) return NextResponse.json({ error: 'Transaksi tidak ditemukan.' }, { status: 404 })
+    if (tx.status === 'VOIDED') {
+      return NextResponse.json({ error: 'Transaksi sudah di-void.' }, { status: 400 })
     }
 
-    // Audit log — store complete old data
-    const userName = user.user_metadata?.name as string ?? 'Owner'
-    await createAuditLog({
-      userId: user.id,
-      userName,
-      action: 'TRANSACTION_VOID',
-      entity: 'Transaction',
-      entityId: txId,
-      oldData: {
-        status: tx.status,
-        total: tx.total,
-        invoiceNumber: tx.invoice_number,
-        vehicleType: tx.vehicle_type,
-        items: tx.transaction_items,
-        createdAt: tx.created_at,
-      },
-      newData: {
+    // Void it
+    await prisma.transaction.update({
+      where: { id },
+      data: {
         status: 'VOIDED',
-        voidReason,
-        voidById: user.id,
-        voidByName: userName,
-        voidAt: now,
-      },
-      ipAddress:
-        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-        request.headers.get('x-real-ip') ??
-        'unknown',
-    })
-
-    // WA notification — if not voided by owner themselves (owner already knows)
-    const waNumber = process.env.NEXT_PUBLIC_WA_OWNER
-    if (waNumber && tx.kasir_id !== user.id) {
-      const kasirName = (tx.users as unknown as { name: string })?.name ?? 'Unknown'
-      const msg = encodeURIComponent(
-        `[CarWash ANTI-MANIPULASI]\n🚫 TRANSAKSI DIVOID\n\nInvoice: ${tx.invoice_number}\nKasir: ${kasirName}\nTotal: Rp ${tx.total.toLocaleString('id-ID')}\nAlasan: ${voidReason}\nDi-void oleh: ${userName}\nWaktu: ${new Date(now).toLocaleString('id-ID')}`
-      )
-      fetch(`https://wa.me/${waNumber}?text=${msg}`).catch(() => {})
-    }
-
-    return NextResponse.json({
-      success: true,
-      transaction: {
-        id: txId,
-        status: 'VOIDED',
-        voidReason,
-        voidAt: now,
+        voidReason: reason,
+        voidById: session.userId,
+        voidAt: new Date(),
       },
     })
+
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Void transaction error:', error)
+    console.error('Void error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

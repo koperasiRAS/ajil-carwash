@@ -1,41 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import prisma from '@/lib/prisma'
-import { createAuditLog } from '@/lib/audit'
-import { createClient } from '@/lib/supabase/server'
+import { verifySession, SESSION_COOKIE_NAME } from '@/lib/auth'
 import { generateInvoiceNumber } from '@/lib/invoice'
 
 export const dynamic = 'force-dynamic'
 
-// ── Auth helpers ────────────────────────────────────────────────────────
-async function authUser() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user
+// ── Auth helper ───────────────────────────────────────────────────────────────
+async function getSession(request: NextRequest) {
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value
+  if (!token) return null
+  return verifySession(token)
 }
 
-// ── GET ────────────────────────────────────────────────────────────────
+// ── GET ───────────────────────────────────────────────────────────────────────
 export async function GET(request: NextRequest) {
-  const user = await authUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const session = await getSession(request)
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = request.nextUrl
   const page = parseInt(searchParams.get('page') ?? '1', 10)
-  const limit = 20
+  const limit = Math.min(parseInt(searchParams.get('limit') ?? '50', 10), 500)
   const skip = (page - 1) * limit
 
-  const kasirId = searchParams.get('kasirId')
   const status = searchParams.get('status')
   const from = searchParams.get('from')
   const to = searchParams.get('to')
+  const search = searchParams.get('search')
 
   const where: Record<string, unknown> = {}
-  if (kasirId) where.kasirId = kasirId
   if (status) where.status = status
   if (from || to) {
     where.createdAt = {}
     if (from) (where.createdAt as Record<string, unknown>).gte = new Date(from)
     if (to) (where.createdAt as Record<string, unknown>).lte = new Date(`${to}T23:59:59.999Z`)
+  }
+  if (search) {
+    where.OR = [
+      { invoiceNumber: { contains: search, mode: 'insensitive' } },
+      { platNomor: { contains: search, mode: 'insensitive' } },
+    ]
   }
 
   const [transactions, total] = await Promise.all([
@@ -46,30 +50,28 @@ export async function GET(request: NextRequest) {
       take: limit,
       include: {
         kasir: { select: { id: true, name: true } },
-        items: true,
         voidBy: { select: { name: true } },
+        items: true,
       },
     }),
     prisma.transaction.count({ where }),
   ])
 
-  return NextResponse.json({ transactions, total, page, totalPages: Math.ceil(total / limit) })
+  return NextResponse.json({ transactions, total, page, limit, totalPages: Math.ceil(total / limit) })
 }
 
-// ── POST ──────────────────────────────────────────────────────────────
+// ── POST ───────────────────────────────────────────────────────────────────────
 const ItemSchema = z.object({
-  serviceId: z.string(),
-  serviceName: z.string(),
+  serviceName: z.string().min(1),
   price: z.number().int().min(0),
   quantity: z.number().int().min(1).default(1),
   subtotal: z.number().int().min(0),
 })
 
 const CreateTxSchema = z.object({
-  shiftId: z.string(),
   customerName: z.string().optional(),
+  platNomor: z.string().min(1, 'Plat nomor wajib diisi'),
   vehicleType: z.enum(['MOTOR', 'MOBIL', 'PICKUP', 'TRUK']),
-  vehiclePlate: z.string().optional(),
   paymentMethod: z.enum(['CASH', 'TRANSFER', 'QRIS']),
   items: z.array(ItemSchema).min(1),
   subtotal: z.number().int().min(0),
@@ -80,8 +82,8 @@ const CreateTxSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
-  const user = await authUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const session = await getSession(request)
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
     const body = await request.json()
@@ -92,10 +94,12 @@ export async function POST(request: NextRequest) {
 
     const data = parsed.data
 
-    // Verify shift is open
-    const shift = await prisma.shift.findUnique({ where: { id: data.shiftId } })
-    if (!shift || shift.status !== 'OPEN') {
-      return NextResponse.json({ error: 'Shift tidak ditemukan atau belum dibuka' }, { status: 400 })
+    // Validate cash payment
+    if (data.paymentMethod === 'CASH' && data.paymentAmount < data.total) {
+      return NextResponse.json(
+        { error: 'Jumlah bayar kurang dari total' },
+        { status: 400 }
+      )
     }
 
     // Generate unique invoice
@@ -111,11 +115,10 @@ export async function POST(request: NextRequest) {
     const tx = await prisma.transaction.create({
       data: {
         invoiceNumber,
-        shiftId: data.shiftId,
-        kasirId: user.id,
+        kasirId: session.userId,
+        platNomor: data.platNomor,
         customerName: data.customerName ?? null,
         vehicleType: data.vehicleType,
-        vehiclePlate: data.vehiclePlate ?? null,
         paymentMethod: data.paymentMethod,
         subtotal: data.subtotal,
         discount: data.discount,
@@ -125,7 +128,6 @@ export async function POST(request: NextRequest) {
         status: 'COMPLETED',
         items: {
           create: data.items.map((item) => ({
-            serviceId: item.serviceId,
             serviceName: item.serviceName,
             price: item.price,
             quantity: item.quantity,
@@ -137,25 +139,6 @@ export async function POST(request: NextRequest) {
         kasir: { select: { id: true, name: true } },
         items: true,
       },
-    })
-
-    await createAuditLog({
-      userId: user.id,
-      userName: user.user_metadata?.name as string ?? 'Kasir',
-      action: 'TRANSACTION_CREATE',
-      entity: 'Transaction',
-      entityId: tx.id,
-      newData: {
-        invoiceNumber,
-        vehicleType: data.vehicleType,
-        paymentMethod: data.paymentMethod,
-        total: data.total,
-        itemCount: data.items.length,
-      },
-      ipAddress:
-        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-        request.headers.get('x-real-ip') ??
-        'unknown',
     })
 
     return NextResponse.json(tx, { status: 201 })

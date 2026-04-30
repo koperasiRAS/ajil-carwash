@@ -1,97 +1,47 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useCallback } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/store/authStore'
 import {
   LayoutDashboard,
   Receipt,
   BarChart3,
-  Tag,
-  Users,
-  Clock,
-  Package,
-  Wallet,
-  Shield,
   Settings,
   LogOut,
   Car,
-  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { SESSION_COOKIE_NAME } from '@/lib/auth'
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/kasir', label: 'Kasir', icon: Receipt },
   { href: '/transactions', label: 'Transaksi', icon: Receipt },
   { href: '/reports', label: 'Laporan', icon: BarChart3 },
-  { href: '/services', label: 'Layanan', icon: Tag },
-  { href: '/employees', label: 'Karyawan', icon: Users },
-  { href: '/shifts', label: 'Shift', icon: Clock },
-  { href: '/stock', label: 'Stok', icon: Package },
-  { href: '/expenses', label: 'Pengeluaran', icon: Wallet },
-  { href: '/audit-logs', label: 'Audit Log', icon: Shield },
   { href: '/settings', label: 'Pengaturan', icon: Settings },
 ]
 
-// Top 5 items for mobile bottom nav
-const MOBILE_NAV = [
-  { href: '/dashboard', label: 'Home', icon: LayoutDashboard },
-  { href: '/transactions', label: 'Transaksi', icon: Receipt },
-  { href: '/reports', label: 'Laporan', icon: BarChart3 },
-  { href: '/employees', label: 'Karyawan', icon: Users },
-  { href: '/settings', label: 'Setting', icon: Settings },
-]
+// Mobile bottom nav
+const MOBILE_NAV = NAV_ITEMS
 
-// --- Idle timeout constants ---
+// ── Idle timeout: 30 minutes ─────────────────────────────────────────────
 const TIMEOUT_MS = 30 * 60 * 1000
-
-interface ShiftSummary {
-  totalTx: number
-  totalOmzet: number
-  motorCount: number
-  mobilCount: number
-  pickupCount: number
-  trukCount: number
-  cashTotal: number
-  expectedCash: number
-}
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, activeShiftId, logout } = useAuthStore()
-  const supabase = createClient()
+  const { user, logout } = useAuthStore()
 
-  // --- Close shift modal state ---
-  const [showCloseShift, setShowCloseShift] = useState(false)
-  const [closingCash, setClosingCash] = useState('')
-  const [closeNote, setCloseNote] = useState('')
-  const [closing, setClosing] = useState(false)
-  const [shiftSummary, setShiftSummary] = useState<ShiftSummary | null>(null)
-  const [closeError, setCloseError] = useState('')
-
-  // --- Perform logout callback ---
+  // ── Perform logout ─────────────────────────────────────────────────────
   const performLogout = useCallback(async () => {
-    if (activeShiftId) {
-      await fetch('/api/shifts/close', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shiftId: activeShiftId,
-          actualCash: 0,
-          note: 'Auto logout - session timeout',
-        }),
-      }).catch(() => {})
-    }
-    await supabase.auth.signOut()
+    document.cookie = `${SESSION_COOKIE_NAME}=; Max-Age=0; path=/`
     logout()
     router.push('/login')
-  }, [activeShiftId, supabase, logout, router])
+  }, [logout, router])
 
-  // --- Idle timeout effect ---
+  // ── Idle timeout ──────────────────────────────────────────────────────
   useEffect(() => {
     let last = Date.now()
     const events = ['mousedown', 'keydown', 'touchstart', 'scroll']
@@ -108,79 +58,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       events.forEach((e) => window.removeEventListener(e, reset))
       clearInterval(interval)
     }
-  }, [activeShiftId, performLogout])
+  }, [performLogout])
 
-  // --- Shift summary fetch ---
-  async function openCloseShiftModal() {
-    if (!activeShiftId) return
-    setShowCloseShift(true)
-    const { data: txList } = await supabase
-      .from('transactions')
-      .select('total, payment_method, vehicle_type')
-      .eq('shift_id', activeShiftId)
-      .eq('status', 'COMPLETED')
-
-    const txList_ = txList ?? []
-    const totalOmzet = txList_.reduce((s, t) => s + t.total, 0)
-    const cashTotal = txList_.filter((t) => t.payment_method === 'CASH').reduce((s, t) => s + t.total, 0)
-    const { data: shiftData } = await supabase
-      .from('shifts')
-      .select('opening_cash')
-      .eq('id', activeShiftId)
-      .single()
-
-    setShiftSummary({
-      totalTx: txList_.length,
-      totalOmzet,
-      motorCount: txList_.filter((t) => t.vehicle_type === 'MOTOR').length,
-      mobilCount: txList_.filter((t) => t.vehicle_type === 'MOBIL').length,
-      pickupCount: txList_.filter((t) => t.vehicle_type === 'PICKUP').length,
-      trukCount: txList_.filter((t) => t.vehicle_type === 'TRUK').length,
-      cashTotal,
-      expectedCash: (shiftData?.opening_cash ?? 0) + cashTotal,
-    })
-  }
-
-  async function confirmCloseShift() {
-    if (!activeShiftId || !user) return
-    setClosing(true)
-    setCloseError('')
-    try {
-      const actualCash = parseInt(closingCash.replace(/\D/g, ''), 10) || 0
-      const diff = shiftSummary ? actualCash - shiftSummary.expectedCash : 0
-
-      const { error } = await supabase
-        .from('shifts')
-        .update({
-          status: 'CLOSED',
-          closing_cash: actualCash,
-          expected_cash: shiftSummary?.expectedCash ?? 0,
-          actual_cash: actualCash,
-          difference: diff,
-          note: closeNote,
-          closed_at: new Date().toISOString(),
-        })
-        .eq('id', activeShiftId)
-
-      if (error) throw error
-
-      await fetch('/api/shifts/close', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shiftId: activeShiftId, diff, note: closeNote }),
-      })
-
-      setShowCloseShift(false)
-      router.push('/shifts?closed=1')
-    } catch {
-      setCloseError('Gagal menutup shift.')
-    } finally {
-      setClosing(false)
-    }
-  }
-
-  // --- Sidebar item component ---
-  const NavItem = ({ href, label, icon: Icon, isCollapsed }: { href: string, label: string, icon: any, isCollapsed?: boolean }) => {
+  // ── Sidebar item ───────────────────────────────────────────────────────
+  const NavItem = ({ href, label, icon: Icon, isCollapsed }: { href: string; label: string; icon: any; isCollapsed?: boolean }) => {
     const active = pathname === href || pathname.startsWith(`${href}/`)
     return (
       <Link
@@ -263,7 +144,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <SidebarContent isCollapsed />
       </aside>
 
-      {/* Main Content Area */}
+      {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-screen w-full md:pl-20 lg:pl-64 pb-16 md:pb-0">
         {/* Mobile Top Bar */}
         <header className="md:hidden flex items-center gap-3 px-4 py-3 bg-card border-b border-border sticky top-0 z-30">
@@ -276,16 +157,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </h1>
             <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Panel Admin</p>
           </div>
-          {activeShiftId && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={openCloseShiftModal}
-              className="border-red-700 text-red-400 hover:bg-red-900/30 hover:text-red-300"
-            >
-              Tutup Shift
-            </Button>
-          )}
         </header>
 
         {/* Desktop Header */}
@@ -299,17 +170,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </h1>
             <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Panel Admin</p>
           </div>
-          <div className="flex-1" />
-          {activeShiftId && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={openCloseShiftModal}
-              className="border-red-700 text-red-400 hover:bg-red-900/30 hover:text-red-300"
-            >
-              Tutup Shift
-            </Button>
-          )}
         </header>
 
         {/* Page Content */}
@@ -335,115 +195,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 "p-1.5 rounded-xl transition-all duration-200",
                 active ? "bg-primary/10" : ""
               )}>
-                <Icon className={cn("w-5 h-5", active ? "fill-primary/20" : "")} />
+                <Icon className="w-5 h-5" />
               </div>
               <span className="truncate w-full text-center">{label}</span>
             </Link>
           )
         })}
       </nav>
-
-      {/* Modal Tutup Shift */}
-      {showCloseShift && shiftSummary && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md">
-            <div className="flex items-center justify-between p-4 border-b border-gray-800">
-              <h2 className="text-lg font-bold text-white">Tutup Shift</h2>
-              <button
-                onClick={() => setShowCloseShift(false)}
-                className="text-gray-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="bg-gray-800 rounded-lg p-3">
-                  <p className="text-gray-400 text-xs">Total Transaksi</p>
-                  <p className="text-xl font-bold text-white">{shiftSummary.totalTx}</p>
-                </div>
-                <div className="bg-gray-800 rounded-lg p-3">
-                  <p className="text-gray-400 text-xs">Total Omzet</p>
-                  <p className="text-xl font-bold text-green-400">
-                    Rp {(shiftSummary.totalOmzet / 1000).toFixed(1)}rb
-                  </p>
-                </div>
-                <div className="bg-gray-800 rounded-lg p-3">
-                  <p className="text-gray-400 text-xs">Motor</p>
-                  <p className="font-bold">{shiftSummary.motorCount}</p>
-                </div>
-                <div className="bg-gray-800 rounded-lg p-3">
-                  <p className="text-gray-400 text-xs">Mobil</p>
-                  <p className="font-bold">{shiftSummary.mobilCount}</p>
-                </div>
-              </div>
-
-              <div className="bg-gray-800 rounded-lg p-3 text-sm space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Kas Awal + Cash Tx</span>
-                  <span className="font-semibold">
-                    Rp {(shiftSummary.expectedCash / 1000).toFixed(1)}rb
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Kas Actual di Laci</span>
-                  <span className="font-semibold text-blue-400">
-                    Rp {parseInt(closingCash.replace(/\D/g, '') || '0', 10).toLocaleString('id-ID')}
-                  </span>
-                </div>
-                {shiftSummary.expectedCash > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Selisih</span>
-                    <span
-                      className={`font-bold ${
-                        (parseInt(closingCash.replace(/\D/g, '') || '0', 10) - shiftSummary.expectedCash) >= 0
-                          ? 'text-green-400'
-                          : 'text-red-400'
-                      }`}
-                    >
-                      Rp{' '}
-                      {Math.abs(
-                        parseInt(closingCash.replace(/\D/g, '') || '0', 10) - shiftSummary.expectedCash
-                      ).toLocaleString('id-ID')}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm text-gray-300 font-medium">
-                  Kas Actual di Laci (Rupiah)
-                </label>
-                <input
-                  type="text"
-                  value={closingCash}
-                  onChange={(e) => {
-                    const raw = e.target.value.replace(/\D/g, '')
-                    setClosingCash(raw ? parseInt(raw, 10).toLocaleString('id-ID') : '')
-                  }}
-                  placeholder="Contoh: 500000"
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm placeholder:text-gray-500"
-                />
-              </div>
-
-              {closeError && (
-                <div className="bg-red-900/30 border border-red-800 text-red-400 text-sm px-3 py-2 rounded-md">
-                  {closeError}
-                </div>
-              )}
-
-              <Button
-                onClick={confirmCloseShift}
-                disabled={closing || !closingCash}
-                className="w-full bg-red-600 hover:bg-red-500 text-white"
-              >
-                {closing ? 'Memproses...' : 'Tutup Shift'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

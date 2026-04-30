@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import prisma from '@/lib/prisma'
+import { verifySession, SESSION_COOKIE_NAME } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
-// ── Validation ──────────────────────────────────────────────────────────
+// ── Validation ───────────────────────────────────────────────────────────────
 const QuerySchema = z.object({
   type: z.enum(['daily', 'weekly', 'monthly', 'custom']),
   date: z.string().optional(),
@@ -14,7 +15,7 @@ const QuerySchema = z.object({
   to: z.string().optional(),
 })
 
-// ── Helpers ──────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────
 function getRange(type: string, date?: string, week?: string, month?: string, from?: string, to?: string) {
   const now = date ? new Date(date) : new Date()
   const start = new Date()
@@ -27,7 +28,6 @@ function getRange(type: string, date?: string, week?: string, month?: string, fr
       return { start, end }
     }
     case 'weekly': {
-      // week format: 2026-W17
       const weekNum = parseInt((week ?? '').split('-W')[1] ?? '1', 10)
       start.setHours(0, 0, 0, 0)
       start.setDate(start.getDate() - start.getDay() + 1 + (weekNum - 1) * 7)
@@ -69,17 +69,18 @@ function getDayLabel(d: number) {
   return ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'][d]
 }
 
-// ── GET ────────────────────────────────────────────────────────────────────
+async function getSession(request: NextRequest) {
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value
+  if (!token) return null
+  return verifySession(token)
+}
+
+// ── GET ───────────────────────────────────────────────────────────────────────
 export async function GET(request: NextRequest) {
+  const session = await getSession(request)
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   try {
-    const supabase = await createClient()
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
     const { searchParams } = request.nextUrl
     const raw = Object.fromEntries(searchParams.entries())
     const parsed = QuerySchema.safeParse(raw)
@@ -91,71 +92,56 @@ export async function GET(request: NextRequest) {
     const { type, date, week, month, from, to } = parsed.data
     const { start, end } = getRange(type, date, week, month, from, to)
 
-    // ── Transactions ──────────────────────────────────────────────────
-    const { data: txList } = await supabase
-      .from('transactions')
-      .select(`
-        id, kasir_id, total, subtotal, discount, payment_method, vehicle_type,
-        created_at, status, void_reason,
-        users!kasir_id(id, name),
-        transaction_items(service_name, service_id, subtotal)
-      `)
-      .gte('created_at', start.toISOString())
-      .lte('created_at', end.toISOString())
+    // Transactions from Prisma
+    const txList = await prisma.transaction.findMany({
+      where: {
+        createdAt: { gte: start, lte: end },
+      },
+      include: {
+        kasir: { select: { id: true, name: true } },
+        items: true,
+        voidBy: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
 
-    const completed = (txList ?? []).filter((t) => t.status === 'COMPLETED')
-    const voided = (txList ?? []).filter((t) => t.status === 'VOIDED')
+    const completed = txList.filter((t) => t.status === 'COMPLETED')
+    const voided = txList.filter((t) => t.status === 'VOIDED')
 
     const omzetKotor = completed.reduce((s, t) => s + t.total, 0)
     const totalDiskon = completed.reduce((s, t) => s + t.discount, 0)
-    const omzetBersih = omzetKotor
     const avgTx = completed.length > 0 ? Math.round(omzetKotor / completed.length) : 0
 
     // Peak hours
     const hourlyOmzet: Record<number, number> = {}
     const hourlyCount: Record<number, number> = {}
     completed.forEach((t) => {
-      const h = new Date(t.created_at).getHours()
+      const h = new Date(t.createdAt).getHours()
       hourlyOmzet[h] = (hourlyOmzet[h] ?? 0) + t.total
       hourlyCount[h] = (hourlyCount[h] ?? 0) + 1
     })
     const peakHour = Object.entries(hourlyCount).sort((a, b) => b[1] - a[1])[0]
 
-    // ── By Service ────────────────────────────────────────────────────
+    // By Service
     const serviceMap: Record<string, { name: string; count: number; omzet: number }> = {}
     completed.forEach((tx) => {
-      ;(tx.transaction_items ?? []).forEach((item: { service_name: string; service_id: string; subtotal: number }) => {
-        const key = item.service_id
-        if (!serviceMap[key]) serviceMap[key] = { name: item.service_name, count: 0, omzet: 0 }
-        serviceMap[key].count += 1
+      tx.items.forEach((item) => {
+        const key = item.serviceName
+        if (!serviceMap[key]) serviceMap[key] = { name: item.serviceName, count: 0, omzet: 0 }
+        serviceMap[key].count += item.quantity
         serviceMap[key].omzet += item.subtotal
       })
     })
+    const totalServiceOmzet = Object.values(serviceMap).reduce((s, x) => s + x.omzet, 0)
     const byService = Object.entries(serviceMap)
-      .map(([id, v]) => ({ serviceId: id, ...v }))
+      .map(([name, v]) => ({ serviceId: name, ...v }))
       .sort((a, b) => b.omzet - a.omzet)
-      .map((v, _, arr) => ({ ...v, pct: arr.reduce((s, x) => s + x.omzet, 0) > 0 ? Math.round((v.omzet / arr.reduce((s, x) => s + x.omzet, 0)) * 100) : 0 }))
+      .map((v) => ({ ...v, pct: totalServiceOmzet > 0 ? Math.round((v.omzet / totalServiceOmzet) * 100) : 0 }))
 
-    // ── By Kasir ───────────────────────────────────────────────────────
-    const kasirMap: Record<string, { name: string; txCount: number; omzet: number; diskon: number; voidCount: number }> = {}
-    txList?.forEach((tx) => {
-      const kid = tx.kasir_id
-      const kuname = (tx.users as unknown as { name: string })?.name ?? 'Unknown'
-      if (!kasirMap[kid]) kasirMap[kid] = { name: kuname, txCount: 0, omzet: 0, diskon: 0, voidCount: 0 }
-      if (tx.status === 'COMPLETED') {
-        kasirMap[kid].txCount += 1
-        kasirMap[kid].omzet += tx.total
-        kasirMap[kid].diskon += tx.discount
-      } else {
-        kasirMap[kid].voidCount += 1
-      }
-    })
-    const byKasir = Object.values(kasirMap).sort((a, b) => b.omzet - a.omzet)
-
-    // ── By Payment Method ─────────────────────────────────────────────
+    // By Payment Method
     const paymentMap: Record<string, number> = {}
     completed.forEach((tx) => {
-      paymentMap[tx.payment_method] = (paymentMap[tx.payment_method] ?? 0) + tx.total
+      paymentMap[tx.paymentMethod] = (paymentMap[tx.paymentMethod] ?? 0) + tx.total
     })
     const byPayment = Object.entries(paymentMap).map(([method, amount]) => ({
       method,
@@ -163,16 +149,16 @@ export async function GET(request: NextRequest) {
       pct: omzetKotor > 0 ? Math.round((amount / omzetKotor) * 100) : 0,
     }))
 
-    // ── By Vehicle ────────────────────────────────────────────────────
+    // By Vehicle
     const vehicleMap: Record<string, { count: number; omzet: number }> = {}
     completed.forEach((tx) => {
-      if (!vehicleMap[tx.vehicle_type]) vehicleMap[tx.vehicle_type] = { count: 0, omzet: 0 }
-      vehicleMap[tx.vehicle_type].count += 1
-      vehicleMap[tx.vehicle_type].omzet += tx.total
+      if (!vehicleMap[tx.vehicleType]) vehicleMap[tx.vehicleType] = { count: 0, omzet: 0 }
+      vehicleMap[tx.vehicleType].count += 1
+      vehicleMap[tx.vehicleType].omzet += tx.total
     })
     const byVehicle = Object.entries(vehicleMap).map(([type, v]) => ({ type, ...v }))
 
-    // ── Hourly / Daily trend ──────────────────────────────────────────
+    // Trend
     const trend: { label: string; omzet: number; count: number }[] = []
     if (type === 'daily') {
       for (let h = 0; h < 24; h++) {
@@ -181,7 +167,7 @@ export async function GET(request: NextRequest) {
     } else {
       const dayMap: Record<number, { omzet: number; count: number }> = {}
       completed.forEach((tx) => {
-        const d = new Date(tx.created_at).getDay()
+        const d = new Date(tx.createdAt).getDay()
         if (!dayMap[d]) dayMap[d] = { omzet: 0, count: 0 }
         dayMap[d].omzet += tx.total
         dayMap[d].count += 1
@@ -191,56 +177,22 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ── Expenses ───────────────────────────────────────────────────────
-    const { data: expenseList } = await supabase
-      .from('expenses')
-      .select('id, amount, category, description, created_at, users!kasir_id(name)')
-      .gte('created_at', start.toISOString())
-      .lte('created_at', end.toISOString())
-
-    const totalExpenses = (expenseList ?? []).reduce((s, e) => s + e.amount, 0)
-
-    const expenseByCategory: Record<string, number> = {}
-    ;(expenseList ?? []).forEach((e) => {
-      expenseByCategory[e.category] = (expenseByCategory[e.category] ?? 0) + e.amount
-    })
-
-    const expenses = (expenseList ?? []).map((e) => ({
-      id: e.id,
-      amount: e.amount,
-      category: e.category,
-      description: e.description,
-      createdAt: e.created_at,
-      inputBy: (e.users as unknown as { name: string })?.name ?? '-',
-    }))
-
-    // ── Estimate Laba ─────────────────────────────────────────────────
-    const estimasiLaba = omzetBersih - totalExpenses
-
     return NextResponse.json({
-      meta: {
-        type,
-        start: start.toISOString(),
-        end: end.toISOString(),
-      },
+      meta: { type, start: start.toISOString(), end: end.toISOString() },
       summary: {
         omzetKotor,
         totalDiskon,
-        omzetBersih,
-        totalExpenses,
-        estimasiLaba,
+        omzetBersih: omzetKotor,
         totalTx: completed.length,
         totalVoid: voided.length,
         avgPerTx: avgTx,
         peakHour: peakHour ? { hour: parseInt(peakHour[0], 10), count: peakHour[1] } : null,
       },
       byService,
-      byKasir,
       byPayment,
       byVehicle,
       trend,
-      expenses,
-      expenseByCategory,
+      transactions: txList,
     })
   } catch (error) {
     console.error('Reports error:', error)

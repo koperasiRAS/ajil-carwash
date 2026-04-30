@@ -18,6 +18,7 @@ interface ReceiptData {
   kasirName: string
   customerName?: string
   vehiclePlate?: string
+  platNomor?: string
   vehicleType: string
   items: TxItem[]
   subtotal: number
@@ -96,7 +97,7 @@ export function Receipt({ data, onPrinted }: ReceiptProps) {
           <div>Tanggal: {formatDate(data.createdAt)}</div>
           <div>Kasir  : {data.kasirName}</div>
           {data.customerName && <div>Pelanggan: {data.customerName}</div>}
-          {data.vehiclePlate && <div>Plat   : {data.vehiclePlate}</div>}
+          <div>Plat   : {data.platNomor || data.vehiclePlate || '-'}</div>
           {separator}
 
           {/* Items */}
