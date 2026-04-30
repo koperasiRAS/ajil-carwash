@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useCallback } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
 import {
   LayoutDashboard,
@@ -24,18 +25,20 @@ const NAV_ITEMS = [
 ]
 
 const MOBILE_NAV = NAV_ITEMS
-const TIMEOUT_MS = 30 * 60 * 1000
+
+function handleLogout(router: ReturnType<typeof useRouter>, logout: () => void) {
+  // 1. Clear the httpOnly cookie
+  document.cookie = `${SESSION_COOKIE_NAME}=; Max-Age=0; path=/; SameSite=Lax`
+  // 2. Clear zustand store
+  logout()
+  // 3. Full page redirect to login
+  window.location.href = '/login'
+}
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuthStore()
-
-  const performLogout = useCallback(async () => {
-    document.cookie = `${SESSION_COOKIE_NAME}=; Max-Age=0; path=/`
-    logout()
-    router.push('/login')
-  }, [logout, router])
 
   // Register service worker for PWA offline support
   useEffect(() => {
@@ -43,22 +46,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       navigator.serviceWorker.register('/sw.js').catch(console.error)
     }
   }, [])
-
-  useEffect(() => {
-    let last = Date.now()
-    const events = ['mousedown', 'keydown', 'touchstart', 'scroll']
-    const reset = () => { last = Date.now() }
-    events.forEach((e) => window.addEventListener(e, reset, { passive: true }))
-
-    const interval = setInterval(() => {
-      if (Date.now() - last > TIMEOUT_MS) performLogout()
-    }, 60_000)
-
-    return () => {
-      events.forEach((e) => window.removeEventListener(e, reset))
-      clearInterval(interval)
-    }
-  }, [performLogout])
 
   const NavItem = ({ href, label, icon: Icon, isCollapsed }: { href: string; label: string; icon: any; isCollapsed?: boolean }) => {
     const active = pathname === href || pathname.startsWith(`${href}/`)
@@ -115,7 +102,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           </div>
         )}
-        <button onClick={performLogout}
+        <button
+          onClick={() => handleLogout(router, logout)}
           className={cn(
             "flex items-center gap-2 rounded-xl text-sm text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors",
             isCollapsed ? "justify-center p-2 mx-auto w-10" : "w-full px-3 py-2"

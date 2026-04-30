@@ -11,17 +11,16 @@ async function getSession(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  // ── Auth: must be logged in ───────────────────────────────────────────
   const session = await getSession(request)
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   try {
-    // Delete transaction items first (explicit, avoids cascade edge cases)
-    await prisma.transactionItem.deleteMany()
-    // Delete all transactions
-    await prisma.transaction.deleteMany()
+    // Use raw SQL to bypass any Prisma-level caching
+    // DELETE items first, then transactions (respecting FK constraint)
+    await prisma.$executeRaw`DELETE FROM "TransactionItem" CASCADE`
+    await prisma.$executeRaw`DELETE FROM "Transaction" CASCADE`
 
     return NextResponse.json({ success: true, message: 'Semua data transaksi berhasil dihapus.' })
   } catch (error: any) {
