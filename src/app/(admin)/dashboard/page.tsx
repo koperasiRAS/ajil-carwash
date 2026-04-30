@@ -1,20 +1,22 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { formatRupiah } from '@/lib/invoice'
 import {
   TrendingUp,
   Receipt,
   X,
   ArrowUp,
-  ArrowDown,
+  Plus,
+  BarChart3,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { PieChart, Pie, Cell as PieCell, Legend, ResponsiveContainer as PC } from 'recharts'
+import { Button } from '@/components/ui/button'
 
 type VehicleType = 'MOTOR' | 'MOBIL' | 'PICKUP' | 'TRUK'
-type PaymentMethod = 'CASH' | 'TRANSFER' | 'QRIS'
-type TransactionStatus = 'COMPLETED' | 'VOIDED'
 
 interface TxItem {
   serviceName: string
@@ -30,13 +32,13 @@ interface Transaction {
   platNomor: string
   customerName?: string
   vehicleType: VehicleType
-  paymentMethod: PaymentMethod
+  paymentMethod: 'CASH' | 'TRANSFER' | 'QRIS'
   subtotal: number
   discount: number
   total: number
   paymentAmount: number
   change: number
-  status: TransactionStatus
+  status: 'COMPLETED' | 'VOIDED'
   createdAt: string
   items: TxItem[]
   kasir?: { id: string; name: string }
@@ -52,20 +54,16 @@ function formatJam(dateStr: string) {
   return new Date(dateStr).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
 }
 
-const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444']
+const PIE_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626']
 
 export default function DashboardPage() {
-  // Track current date to auto-reset at midnight
-  const [todayKey, setTodayKey] = useState(() =>
-    new Date().toISOString().slice(0, 10)
-  )
+  const [todayKey, setTodayKey] = useState(() => new Date().toISOString().slice(0, 10))
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [recentTx, setRecentTx] = useState<Transaction[]>([])
   const [weekOmzet, setWeekOmzet] = useState<DayOmzet[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null)
 
-  // ── Stats derived from today's transactions ────────────────────────────
   const todayTx = transactions.filter((t) => t.status === 'COMPLETED')
   const omzetToday = todayTx.reduce((s, t) => s + t.total, 0)
   const txCount = todayTx.length
@@ -80,22 +78,6 @@ export default function DashboardPage() {
     { name: 'Truk', value: todayTx.filter((t) => t.vehicleType === 'TRUK').length },
   ].filter((d) => d.value > 0)
 
-  const paymentBreakdown = [
-    {
-      name: 'CASH',
-      value: todayTx.filter((t) => t.paymentMethod === 'CASH').reduce((s, t) => s + t.total, 0),
-    },
-    {
-      name: 'TRANSFER',
-      value: todayTx.filter((t) => t.paymentMethod === 'TRANSFER').reduce((s, t) => s + t.total, 0),
-    },
-    {
-      name: 'QRIS',
-      value: todayTx.filter((t) => t.paymentMethod === 'QRIS').reduce((s, t) => s + t.total, 0),
-    },
-  ].filter((d) => d.value > 0)
-
-  // ── Load data from API (Prisma) ─────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
@@ -103,11 +85,9 @@ export default function DashboardPage() {
       if (!res.ok) return
       const data = await res.json()
       const txList: Transaction[] = data.transactions ?? []
-
       setTransactions(txList)
       setRecentTx(txList.slice(0, 10))
 
-      // 7-day chart
       const days: DayOmzet[] = []
       for (let i = 6; i >= 0; i--) {
         const d = new Date()
@@ -115,16 +95,12 @@ export default function DashboardPage() {
         const start = new Date(d); start.setHours(0, 0, 0, 0)
         const end = new Date(d); end.setHours(23, 59, 59, 999)
         const dayTx = txList.filter(
-          (t) =>
-            t.status === 'COMPLETED' &&
-            new Date(t.createdAt) >= start &&
-            new Date(t.createdAt) <= end
+          (t) => t.status === 'COMPLETED' && new Date(t.createdAt) >= start && new Date(t.createdAt) <= end
         )
-        const omzet = dayTx.reduce((s, t) => s + t.total, 0)
         days.push({
           date: d.toISOString().slice(0, 10),
           label: d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' }),
-          omzet,
+          omzet: dayTx.reduce((s, t) => s + t.total, 0),
         })
       }
       setWeekOmzet(days)
@@ -135,12 +111,8 @@ export default function DashboardPage() {
     }
   }, [])
 
-  // Initial load
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  useEffect(() => { loadData() }, [loadData])
 
-  // Auto-refresh every 30 seconds + check midnight
   useEffect(() => {
     const id = setInterval(() => {
       const today = new Date().toISOString().slice(0, 10)
@@ -154,181 +126,198 @@ export default function DashboardPage() {
     return () => clearInterval(id)
   }, [todayKey, loadData])
 
-  const PctTag = ({ value }: { value: number }) => (
-    <span className={`flex items-center gap-0.5 text-xs font-medium ${value >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-      {value >= 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-      {Math.abs(value).toFixed(1)}%
-    </span>
-  )
-
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-white">Dashboard</h1>
-        <p className="text-sm text-gray-500">
-          {new Date().toLocaleDateString('id-ID', {
-            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-          })}
-        </p>
+      {/* Page Header */}
+      <div className="flex items-start justify-between">
+        <div className="page-header mb-0">
+          <h1>Dashboard</h1>
+          <p>{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+        </div>
+        {/* Quick Action Shortcuts */}
+        <div className="flex gap-2 no-print">
+          <Link href="/kasir">
+            <Button size="sm" className="btn-primary shadow-sm">
+              <Plus className="w-4 h-4 mr-1" /> Transaksi Baru
+            </Button>
+          </Link>
+          <Link href="/reports">
+            <Button size="sm" variant="outline" className="border-border">
+              <BarChart3 className="w-4 h-4 mr-1" /> Laporan
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        {/* Omzet Hari Ini */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="stat-card">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500 uppercase tracking-wider">Omzet Hari Ini</span>
-            <TrendingUp className="w-4 h-4 text-green-400" />
+            <span className="stat-label">Omzet Hari Ini</span>
+            <div className="bg-emerald-50 p-2 rounded-lg">
+              <TrendingUp className="w-4 h-4 text-emerald-600" />
+            </div>
           </div>
-          <p className="text-2xl lg:text-3xl font-bold text-green-400">
+          <p className="text-2xl lg:text-3xl font-bold text-emerald-600">
             {loading ? '—' : formatRupiah(omzetToday)}
           </p>
-          <p className="text-xs text-gray-600 mt-1">{txCount} transaksi</p>
+          <p className="text-sm text-muted-foreground mt-1">{txCount} transaksi hari ini</p>
         </div>
 
-        {/* Jumlah Transaksi */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div className="stat-card">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500 uppercase tracking-wider">Transaksi</span>
-            <Receipt className="w-4 h-4 text-blue-400" />
+            <span className="stat-label">Transaksi</span>
+            <div className="bg-blue-50 p-2 rounded-lg">
+              <Receipt className="w-4 h-4 text-blue-600" />
+            </div>
           </div>
-          <p className="text-2xl lg:text-3xl font-bold text-white">{loading ? '—' : txCount}</p>
-          <div className="flex gap-2 mt-1">
-            <span className="text-xs text-gray-500">Motor <span className="font-semibold text-white">{txMotor}</span></span>
-            <span className="text-xs text-gray-500">Mobil <span className="font-semibold text-white">{txMobil}</span></span>
-            <span className="text-xs text-gray-500">Lain <span className="font-semibold text-white">{txOther}</span></span>
+          <p className="text-2xl lg:text-3xl font-bold text-foreground">
+            {loading ? '—' : txCount}
+          </p>
+          <div className="flex gap-3 mt-2">
+            <span className="text-xs text-muted-foreground">Motor <span className="font-semibold text-foreground">{txMotor}</span></span>
+            <span className="text-xs text-muted-foreground">Mobil <span className="font-semibold text-foreground">{txMobil}</span></span>
+            <span className="text-xs text-muted-foreground">Lain <span className="font-semibold text-foreground">{txOther}</span></span>
           </div>
         </div>
 
-        {/* Plat Nomor Hari Ini */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div className="stat-card">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-500 uppercase tracking-wider">Plat Dilayani</span>
-            <Receipt className="w-4 h-4 text-purple-400" />
+            <span className="stat-label">Kendaraan Dilayani</span>
+            <div className="bg-purple-50 p-2 rounded-lg">
+              <Receipt className="w-4 h-4 text-purple-600" />
+            </div>
           </div>
-          <p className="text-2xl lg:text-3xl font-bold text-white">{loading ? '—' : txCount}</p>
-          <p className="text-xs text-gray-600 mt-1">kendaraan hari ini</p>
+          <p className="text-2xl lg:text-3xl font-bold text-foreground">
+            {loading ? '—' : txCount}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">unit hari ini</p>
         </div>
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Omzet 7 Hari */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-semibold text-white mb-4">Omzet 7 Hari Terakhir</h3>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={weekOmzet} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-              <XAxis dataKey="label" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false}
-                tickFormatter={(v) => `Rp${(v / 1000).toFixed(0)}rb`} />
-              <Tooltip
-                formatter={(value) => [formatRupiah(value as number), 'Omzet']}
-                contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 8, color: '#fff' }}
-                cursor={{ fill: '#37415140' }}
-              />
-              <Bar dataKey="omzet" radius={[4, 4, 0, 0]}>
-                {weekOmzet.map((_, i) => (
-                  <Cell key={i} fill={i === 6 ? '#3b82f6' : '#374151'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="card">
+          <div className="px-5 pt-5 pb-4">
+            <h3 className="text-sm font-semibold text-foreground">Omzet 7 Hari Terakhir</h3>
+          </div>
+          <div className="px-5 pb-5">
+            <ResponsiveContainer width="100%" height={160}>
+              <BarChart data={weekOmzet} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false}
+                  tickFormatter={(v) => `Rp${(v / 1000).toFixed(0)}rb`} />
+                <Tooltip
+                  formatter={(value) => [formatRupiah(value as number), 'Omzet']}
+                  contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#1a1d2e', fontSize: 12 }}
+                  cursor={{ fill: '#f1f5f9' }}
+                />
+                <Bar dataKey="omzet" radius={[4, 4, 0, 0]}>
+                  {weekOmzet.map((_, i) => (
+                    <Cell key={i} fill={i === 6 ? '#2563eb' : '#cbd5e1'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
-        {/* Breakdown Kendaraan */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-semibold text-white mb-4">Kendaraan Hari Ini</h3>
-          {vehicleBreakdown.length > 0 ? (
-            <PC width="100%" height={160}>
-              <PieChart>
-                <Pie
-                  data={vehicleBreakdown}
-                  cx="50%" cy="50%"
-                  innerRadius={40}
-                  outerRadius={65}
-                  paddingAngle={3}
-                  dataKey="value"
-                  label={({ name, value }) => `${name}: ${value}`}
-                  labelLine={false}
-                >
-                  {vehicleBreakdown.map((_, i) => (
-                    <PieCell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Legend iconSize={8} wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
-              </PieChart>
-            </PC>
-          ) : (
-            <div className="h-[160px] flex items-center justify-center text-gray-500 text-sm">
-              Belum ada transaksi hari ini
-            </div>
-          )}
+        <div className="card">
+          <div className="px-5 pt-5 pb-4">
+            <h3 className="text-sm font-semibold text-foreground">Kendaraan Hari Ini</h3>
+          </div>
+          <div className="px-5 pb-5">
+            {vehicleBreakdown.length > 0 ? (
+              <PC width="100%" height={160}>
+                <PieChart>
+                  <Pie
+                    data={vehicleBreakdown} cx="50%" cy="50%"
+                    innerRadius={40} outerRadius={65}
+                    paddingAngle={3} dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                    labelLine={false}
+                  >
+                    {vehicleBreakdown.map((_, i) => (
+                      <PieCell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Legend iconSize={8} wrapperStyle={{ fontSize: 11, color: '#64748b' }} />
+                </PieChart>
+              </PC>
+            ) : (
+              <div className="h-[160px] flex items-center justify-center text-muted-foreground text-sm">
+                Belum ada transaksi hari ini
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Tabel Transaksi Terbaru */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-          <h3 className="text-sm font-semibold text-white">Transaksi Terbaru</h3>
-          {loading ? null : (
-            <div className="flex items-center gap-1 text-xs text-green-400">
-              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              Auto-refresh 30s
-            </div>
-          )}
+      {/* Recent Transactions */}
+      <div className="card overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h3 className="text-sm font-semibold text-foreground">Transaksi Terbaru</h3>
+          <div className="flex items-center gap-3">
+            <Link href="/transactions">
+              <Button size="sm" variant="ghost" className="text-primary">Lihat Semua</Button>
+            </Link>
+            {loading ? null : (
+              <div className="flex items-center gap-1.5 text-xs text-emerald-600">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Auto-refresh 30s
+              </div>
+            )}
+          </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="data-table">
             <thead>
-              <tr className="border-b border-gray-800 text-gray-500 uppercase tracking-wider">
-                <th className="text-left px-4 py-2 font-medium">Invoice</th>
-                <th className="text-left px-4 py-2 font-medium hidden sm:table-cell">Plat No</th>
-                <th className="text-left px-4 py-2 font-medium hidden md:table-cell">Layanan</th>
-                <th className="text-right px-4 py-2 font-medium">Total</th>
-                <th className="text-center px-4 py-2 font-medium hidden sm:table-cell">Metode</th>
-                <th className="text-center px-4 py-2 font-medium">Jam</th>
-                <th className="text-center px-4 py-2 font-medium">Aksi</th>
+              <tr className="border-b border-border">
+                <th className="text-left px-5 py-3 font-medium">Invoice</th>
+                <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Plat No</th>
+                <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Layanan</th>
+                <th className="text-right px-4 py-3 font-medium">Total</th>
+                <th className="text-center px-4 py-3 font-medium hidden sm:table-cell">Metode</th>
+                <th className="text-center px-4 py-3 font-medium">Jam</th>
+                <th className="text-center px-4 py-3 font-medium">Aksi</th>
               </tr>
             </thead>
             <tbody>
               {recentTx.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center text-gray-600 py-8">
+                  <td colSpan={7} className="text-center text-muted-foreground py-10">
                     {loading ? 'Memuat...' : 'Belum ada transaksi'}
                   </td>
                 </tr>
               ) : recentTx.map((tx) => (
                 <tr key={tx.id}
-                  className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${
-                    tx.status === 'VOIDED' ? 'bg-red-950/10' : ''
-                  }`}>
-                  <td className={`px-4 py-2.5 font-semibold ${tx.status === 'VOIDED' ? 'text-red-400/60 line-through' : 'text-blue-400'}`}>
+                  className={`border-b border-border/50 hover:bg-accent/50 transition-colors ${tx.status === 'VOIDED' ? 'bg-red-50/30' : ''}`}>
+                  <td className={`px-5 py-3 font-semibold ${tx.status === 'VOIDED' ? 'text-red-500 line-through' : 'text-primary'}`}>
                     {tx.invoiceNumber}
                   </td>
-                  <td className="px-4 py-2.5 text-gray-300 hidden sm:table-cell">{tx.platNomor || '-'}</td>
-                  <td className="px-4 py-2.5 text-gray-400 hidden md:table-cell max-w-[120px] truncate">
+                  <td className="px-4 py-3 text-foreground hidden sm:table-cell">{tx.platNomor || '-'}</td>
+                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell max-w-[120px] truncate">
                     {tx.items.map((i) => i.serviceName).join(', ') || '-'}
                   </td>
-                  <td className={`px-4 py-2.5 text-right font-semibold ${tx.status === 'VOIDED' ? 'text-red-400/60 line-through' : 'text-green-400'}`}>
+                  <td className={`px-4 py-3 text-right font-semibold ${tx.status === 'VOIDED' ? 'text-red-400/60 line-through' : 'text-emerald-600'}`}>
                     {formatRupiah(tx.total)}
                   </td>
-                  <td className="px-4 py-2.5 text-center hidden sm:table-cell">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                      tx.paymentMethod === 'CASH' ? 'bg-green-900/40 text-green-400' :
-                      tx.paymentMethod === 'TRANSFER' ? 'bg-blue-900/40 text-blue-400' :
-                      'bg-purple-900/40 text-purple-400'
+                  <td className="px-4 py-3 text-center hidden sm:table-cell">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                      tx.paymentMethod === 'CASH' ? 'badge-green' :
+                      tx.paymentMethod === 'TRANSFER' ? 'badge-blue' :
+                      'badge-yellow'
                     }`}>
                       {tx.paymentMethod}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-center text-gray-500">{formatJam(tx.createdAt)}</td>
-                  <td className="px-4 py-2.5 text-center">
+                  <td className="px-4 py-3 text-center text-muted-foreground">{formatJam(tx.createdAt)}</td>
+                  <td className="px-4 py-3 text-center">
                     <button
                       onClick={() => setSelectedTx(tx)}
-                      className="text-gray-500 hover:text-blue-400 p-1 rounded hover:bg-blue-900/20 transition-colors"
+                      className="text-primary hover:text-primary/80 text-xs font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors"
                     >
-                      <span className="text-xs">Detail</span>
+                      Detail
                     </button>
                   </td>
                 </tr>
@@ -338,45 +327,47 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Modal Detail */}
+      {/* Transaction Detail Modal */}
       {selectedTx && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-sm max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-gray-800">
-              <h3 className="text-white font-bold">Detail Transaksi</h3>
-              <button onClick={() => setSelectedTx(null)} className="text-gray-400 hover:text-white">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSelectedTx(null)}>
+          <div className="card w-full max-w-sm max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="font-semibold text-foreground">Detail Transaksi</h3>
+              <button onClick={() => setSelectedTx(null)} className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-accent">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-4 space-y-3 text-sm">
-              <div className="bg-gray-800 rounded-lg p-3 text-center">
-                <p className={`text-xl font-bold ${selectedTx.status === 'VOIDED' ? 'text-red-400' : 'text-blue-400'}`}>
+            <div className="p-5 space-y-4">
+              <div className="bg-accent rounded-xl p-4 text-center">
+                <p className={`text-xl font-bold ${selectedTx.status === 'VOIDED' ? 'text-red-500' : 'text-primary'}`}>
                   {selectedTx.invoiceNumber}
                 </p>
-                {selectedTx.status === 'VOIDED' && <p className="text-xs text-red-400 mt-1">VOIDED</p>}
+                {selectedTx.status === 'VOIDED' && (
+                  <span className="inline-block mt-1 px-2 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded-full">VOIDED</span>
+                )}
               </div>
-              <div className="space-y-2 text-gray-300">
-                <div className="flex justify-between"><span className="text-gray-500">Plat No</span><span>{selectedTx.platNomor || '-'}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Kendaraan</span><span>{selectedTx.vehicleType}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Waktu</span><span>{new Date(selectedTx.createdAt).toLocaleString('id-ID')}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Metode</span><span>{selectedTx.paymentMethod}</span></div>
+              <div className="space-y-2.5 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Plat No</span><span className="font-medium">{selectedTx.platNomor || '-'}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Kendaraan</span><span className="font-medium">{selectedTx.vehicleType}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Waktu</span><span className="font-medium">{new Date(selectedTx.createdAt).toLocaleString('id-ID')}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Metode</span><span className="font-medium">{selectedTx.paymentMethod}</span></div>
               </div>
-              <div className="border-t border-gray-800 pt-3">
-                <p className="text-xs text-gray-500 mb-2">Layanan</p>
-                <div className="space-y-1">
+              <div className="border-t border-border pt-4">
+                <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">Layanan</p>
+                <div className="space-y-2">
                   {selectedTx.items.map((item, i) => (
                     <div key={i} className="flex justify-between text-sm">
-                      <span className="text-gray-300">
+                      <span className="text-foreground">
                         {item.serviceName}{item.quantity > 1 ? ` ×${item.quantity}` : ''}
                       </span>
-                      <span className="text-gray-400">{formatRupiah(item.subtotal)}</span>
+                      <span className="text-muted-foreground">{formatRupiah(item.subtotal)}</span>
                     </div>
                   ))}
                 </div>
               </div>
-              <div className="border-t border-gray-800 pt-3 flex justify-between text-white font-bold">
+              <div className="border-t border-border pt-4 flex justify-between font-bold text-base">
                 <span>Total</span>
-                <span className="text-green-400">{formatRupiah(selectedTx.total)}</span>
+                <span className="text-emerald-600">{formatRupiah(selectedTx.total)}</span>
               </div>
             </div>
           </div>

@@ -23,10 +23,7 @@ const NAV_ITEMS = [
   { href: '/settings', label: 'Pengaturan', icon: Settings },
 ]
 
-// Mobile bottom nav
 const MOBILE_NAV = NAV_ITEMS
-
-// ── Idle timeout: 30 minutes ─────────────────────────────────────────────
 const TIMEOUT_MS = 30 * 60 * 1000
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -34,14 +31,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter()
   const { user, logout } = useAuthStore()
 
-  // ── Perform logout ─────────────────────────────────────────────────────
   const performLogout = useCallback(async () => {
     document.cookie = `${SESSION_COOKIE_NAME}=; Max-Age=0; path=/`
     logout()
     router.push('/login')
   }, [logout, router])
 
-  // ── Idle timeout ──────────────────────────────────────────────────────
+  // Register service worker for PWA offline support
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(console.error)
+    }
+  }, [])
+
   useEffect(() => {
     let last = Date.now()
     const events = ['mousedown', 'keydown', 'touchstart', 'scroll']
@@ -49,9 +51,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     events.forEach((e) => window.addEventListener(e, reset, { passive: true }))
 
     const interval = setInterval(() => {
-      if (Date.now() - last > TIMEOUT_MS) {
-        performLogout()
-      }
+      if (Date.now() - last > TIMEOUT_MS) performLogout()
     }, 60_000)
 
     return () => {
@@ -60,16 +60,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, [performLogout])
 
-  // ── Sidebar item ───────────────────────────────────────────────────────
   const NavItem = ({ href, label, icon: Icon, isCollapsed }: { href: string; label: string; icon: any; isCollapsed?: boolean }) => {
     const active = pathname === href || pathname.startsWith(`${href}/`)
     return (
-      <Link
-        href={href}
+      <Link href={href}
         className={cn(
-          'flex items-center gap-3 px-3 py-2.5 mx-2 rounded-lg text-sm font-medium transition-colors group',
+          'flex items-center gap-3 px-3 py-2.5 mx-2 rounded-xl text-sm font-medium transition-all duration-200',
           active
-            ? 'bg-primary text-primary-foreground'
+            ? 'bg-primary text-primary-foreground shadow-sm'
             : 'text-muted-foreground hover:bg-accent hover:text-foreground'
         )}
         title={isCollapsed ? label : undefined}
@@ -81,15 +79,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   const SidebarContent = ({ isCollapsed = false }: { isCollapsed?: boolean }) => (
-    <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
+    <div className="flex flex-col h-full bg-card border-r border-border">
       {/* Header */}
-      <div className={cn("flex items-center border-b border-sidebar-border py-4", isCollapsed ? "justify-center px-0" : "px-4 gap-3")}>
-        <div className="bg-primary p-2 rounded-lg shrink-0">
+      <div className={cn("flex items-center border-b border-border py-4", isCollapsed ? "justify-center px-0" : "px-4 gap-3")}>
+        <div className="bg-primary p-2 rounded-xl shrink-0">
           <Car className="w-5 h-5 text-primary-foreground" />
         </div>
         {!isCollapsed && (
           <div className="min-w-0">
-            <p className="font-bold text-sidebar-foreground text-sm truncate">
+            <p className="font-bold text-foreground text-sm truncate">
               {process.env.NEXT_PUBLIC_APP_NAME ?? 'CarWash'}
             </p>
             <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Panel Admin</p>
@@ -105,22 +103,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-sidebar-border p-3">
+      <div className="border-t border-border p-3 space-y-2">
         {!isCollapsed && (
-          <div className="flex items-center gap-3 px-2 py-2 mb-2">
-            <div className="bg-primary/20 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-primary shrink-0">
+          <div className="flex items-center gap-3 px-2 py-2">
+            <div className="bg-primary/10 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-primary shrink-0">
               {user?.name?.charAt(0)?.toUpperCase() ?? 'A'}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sidebar-foreground text-xs font-bold truncate">{user?.name}</p>
+              <p className="text-foreground text-xs font-bold truncate">{user?.name}</p>
               <p className="text-muted-foreground text-xs truncate">Admin</p>
             </div>
           </div>
         )}
-        <button
-          onClick={performLogout}
+        <button onClick={performLogout}
           className={cn(
-            "flex items-center gap-2 rounded-lg text-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors",
+            "flex items-center gap-2 rounded-xl text-sm text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors",
             isCollapsed ? "justify-center p-2 mx-auto w-10" : "w-full px-3 py-2"
           )}
           title={isCollapsed ? "Logout" : undefined}
@@ -134,12 +131,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row">
-      {/* Desktop Sidebar (lg+) */}
+      {/* Desktop Sidebar */}
       <aside className="hidden lg:block w-64 shrink-0 fixed inset-y-0 z-40">
         <SidebarContent />
       </aside>
 
-      {/* Tablet Collapsed Sidebar (md to lg) */}
+      {/* Tablet Collapsed Sidebar */}
       <aside className="hidden md:block lg:hidden w-20 shrink-0 fixed inset-y-0 z-40">
         <SidebarContent isCollapsed />
       </aside>
@@ -173,7 +170,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-4 lg:p-6 overflow-x-hidden">
+        <main className="flex-1 p-4 lg:p-6 overflow-x-hidden bg-background">
           {children}
         </main>
       </div>
@@ -183,9 +180,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {MOBILE_NAV.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`)
           return (
-            <Link
-              key={href}
-              href={href}
+            <Link key={href} href={href}
               className={cn(
                 'flex flex-col items-center justify-center gap-1 min-w-[64px] py-2 px-1 text-[10px] font-medium transition-all duration-200',
                 active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'

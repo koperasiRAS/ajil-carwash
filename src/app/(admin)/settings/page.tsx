@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Settings, Save, Download, CheckCircle } from 'lucide-react'
+import { Settings, Save, Download, CheckCircle, Trash2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -24,6 +24,12 @@ export default function SettingsPage() {
   const [original, setOriginal] = useState<SystemSettings | null>(null)
   const [saved, setSaved] = useState(false)
   const [exporting, setExporting] = useState(false)
+
+  // Clear data flow
+  const [clearConfirm, setClearConfirm] = useState(false)
+  const [clearConfirm2, setClearConfirm2] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [clearError, setClearError] = useState('')
 
   useEffect(() => {
     const s = loadSettings()
@@ -77,64 +83,143 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleClearAllData() {
+    setClearing(true)
+    setClearError('')
+    try {
+      const res = await fetch('/api/debug/clear-all', { method: 'POST' })
+      if (!res.ok) throw new Error('Gagal menghapus data')
+      alert('Semua data transaksi berhasil dihapus!')
+      setClearConfirm2(false)
+      setClearConfirm(false)
+    } catch (err) {
+      setClearError(err instanceof Error ? err.message : 'Gagal menghapus data')
+    } finally {
+      setClearing(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white flex items-center gap-2">
-          <Settings className="w-5 h-5 text-gray-400" /> Pengaturan Sistem
+        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+          <Settings className="w-5 h-5 text-muted-foreground" /> Pengaturan Sistem
         </h1>
         <div className="flex items-center gap-3">
           {saved && (
-            <span className="text-green-400 text-sm flex items-center gap-1">
+            <span className="text-emerald-600 text-sm font-medium flex items-center gap-1">
               <CheckCircle className="w-4 h-4" /> Tersimpan
             </span>
           )}
           {hasChanges() && (
-            <span className="text-yellow-400 text-xs bg-yellow-900/30 px-2 py-1 rounded-full border border-yellow-800">
+            <span className="text-warning text-xs bg-warning/10 px-2 py-1 rounded-full border border-warning/20">
               Ada perubahan belum disimpan
             </span>
           )}
-          <Button onClick={handleSave} disabled={!hasChanges()}
-            className="bg-blue-600 hover:bg-blue-500 text-white">
-            <Save className="w-4 h-4 mr-1" />
-            Simpan Perubahan
+          <Button onClick={handleSave} disabled={!hasChanges()} className="btn-primary">
+            <Save className="w-4 h-4 mr-1" /> Simpan
           </Button>
         </div>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4 max-w-xl">
-        <p className="text-xs text-gray-500 uppercase tracking-wider">Informasi yang tampil di struk dan header</p>
+      {/* Business Info Card */}
+      <div className="card px-5 py-5 space-y-4 max-w-2xl">
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Informasi di Struk & Header</p>
+        </div>
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Nama Usaha</label>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Nama Usaha</label>
             <Input value={settings.businessName}
               onChange={(e) => setSettings((s) => ({ ...s, businessName: e.target.value }))}
-              className="bg-gray-800 border-gray-700 text-white" />
+              className="max-w-md" />
           </div>
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Alamat</label>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Alamat</label>
             <Input value={settings.businessAddress}
               onChange={(e) => setSettings((s) => ({ ...s, businessAddress: e.target.value }))}
-              placeholder="Jl. example No. 1, Kota" className="bg-gray-800 border-gray-700 text-white" />
+              placeholder="Jl. example No. 1, Kota"
+              className="max-w-md" />
           </div>
           <div>
-            <label className="text-xs text-gray-500 block mb-1">Nomor Telepon</label>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">Nomor Telepon</label>
             <Input value={settings.businessPhone}
               onChange={(e) => setSettings((s) => ({ ...s, businessPhone: e.target.value }))}
-              placeholder="08xxxxxxxxxx" className="bg-gray-800 border-gray-700 text-white" />
+              placeholder="08xxxxxxxxxx"
+              className="max-w-md" />
           </div>
         </div>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-3 max-w-xl">
-        <p className="text-xs text-gray-500 uppercase tracking-wider">Backup Data</p>
-        <p className="text-sm text-gray-400">Export semua transaksi ke file Excel.</p>
-        <Button onClick={handleExport} disabled={exporting}
-          className="bg-green-600 hover:bg-green-500 text-white">
+      {/* Export Data Card */}
+      <div className="card px-5 py-5 space-y-3 max-w-2xl">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Backup Data</p>
+        <p className="text-sm text-muted-foreground">Export semua transaksi ke file Excel untuk backup.</p>
+        <Button onClick={handleExport} disabled={exporting} className="btn-success">
           <Download className="w-4 h-4 mr-1" />
-          {exporting ? 'Mengeksport...' : 'Export Transaksi (Excel)'}
+          {exporting ? 'Mengeksport...' : 'Export Semua Data (Excel)'}
         </Button>
       </div>
+
+      {/* Clear Data Card */}
+      <div className="card border-red-200 bg-red-50 px-5 py-5 space-y-3 max-w-2xl">
+        <p className="text-xs font-semibold text-red-600 uppercase tracking-wider flex items-center gap-1">
+          <AlertTriangle className="w-3.5 h-3.5" /> Zona Bahaya
+        </p>
+        <p className="text-sm text-red-600">Hapus SEMUA transaksi dari database. Tindakan ini TIDAK DAPAT dibatalkan.</p>
+        <Button onClick={() => setClearConfirm(true)} variant="outline" className="border-red-300 text-red-600 hover:bg-red-100">
+          <Trash2 className="w-4 h-4 mr-1" /> Hapus Semua Data
+        </Button>
+      </div>
+
+      {/* Confirmation Dialog 1 */}
+      {clearConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="card max-w-sm p-6 space-y-4 text-center">
+            <div className="bg-red-50 w-14 h-14 rounded-full flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-7 h-7 text-red-500" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-foreground">Konfirmasi Penghapusan</h3>
+              <p className="text-sm text-muted-foreground mt-2">
+                Anda akan menghapus SEMUA data transaksi. Ini <span className="font-bold text-red-500">TIDAK DAPAT dibatalkan</span>.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button onClick={() => setClearConfirm(false)} variant="outline" className="flex-1">Batal</Button>
+              <Button onClick={() => { setClearConfirm(false); setClearConfirm2(true) }}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white">Ya, Hapus Semua</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog 2 - Final Warning */}
+      {clearConfirm2 && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+          <div className="card max-w-sm p-6 space-y-4 text-center">
+            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto" />
+            <div>
+              <h3 className="text-lg font-bold text-foreground">PERINGATAN TERAKHIR</h3>
+              <p className="text-sm text-muted-foreground mt-2">
+                Ini adalah peringatan terakhir. Setelah dihapus, data tidak bisa dikembalikan.
+              </p>
+              <p className="text-xs text-red-500 mt-1 font-semibold">Anda YAKIN ingin melanjutkan?</p>
+            </div>
+            {clearError && (
+              <div className="bg-red-100 border border-red-200 text-red-600 text-sm px-3 py-2 rounded-xl">{clearError}</div>
+            )}
+            <div className="flex gap-3">
+              <Button onClick={() => setClearConfirm2(false)} variant="outline" className="flex-1">Batal</Button>
+              <Button onClick={handleClearAllData} disabled={clearing}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white">
+                {clearing ? 'Menghapus...' : 'YA, HAPUS SEMUA DATA'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

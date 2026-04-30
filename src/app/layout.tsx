@@ -12,6 +12,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: process.env.NEXT_PUBLIC_APP_NAME ?? "CarWash Manager",
   description: "Sistem Manajemen Cuci Mobil & Motor",
+  icons: {
+    icon: '/icon-192.png',
+    apple: '/icon-512.png',
+  },
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({

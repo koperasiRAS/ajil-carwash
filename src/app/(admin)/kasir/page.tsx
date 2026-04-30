@@ -1,14 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { formatRupiah } from '@/lib/invoice'
 import { Receipt } from '@/components/kasir/Receipt'
 import { Plus, X, Printer, ShoppingCart, Check, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog, DialogContent,
-} from '@/components/ui/dialog'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 
 type VehicleType = 'MOTOR' | 'MOBIL' | 'PICKUP' | 'TRUK'
 type PayMethod = 'CASH' | 'TRANSFER' | 'QRIS'
@@ -26,7 +24,6 @@ const PAY_LABELS: Record<PayMethod, string> = {
   QRIS: 'QRIS',
 }
 
-// Predefined quick-add services per vehicle type
 const QUICK_SERVICES: Record<VehicleType, { name: string; price: number }[]> = {
   MOTOR: [
     { name: 'Cuci Motor Reguler', price: 15000 },
@@ -76,10 +73,31 @@ interface TransactionResult {
 
 type Step = 'input' | 'confirm' | 'done'
 
+const DRAFT_KEY = 'carwash_kasir_draft'
+
+// ── sessionStorage draft helpers ─────────────────────────────────────
+function saveDraft(data: { platNomor: string; customerName: string; vehicleType: VehicleType; cart: CartEntry[]; discount: number }) {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(data))
+  } catch {}
+}
+
+function loadDraft(): { platNomor: string; customerName: string; vehicleType: VehicleType; cart: CartEntry[]; discount: number } | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function clearDraft() {
+  try { sessionStorage.removeItem(DRAFT_KEY) } catch {}
+}
+
 export default function KasirPage() {
   const { user } = useAuthStore()
 
-  // ── State ──────────────────────────────────────────────────────────────
   const [step, setStep] = useState<Step>('input')
   const [vehicleType, setVehicleType] = useState<VehicleType>('MOBIL')
   const [platNomor, setPlatNomor] = useState('')
@@ -90,7 +108,6 @@ export default function KasirPage() {
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
 
-  // Manual service input
   const [svcName, setSvcName] = useState('')
   const [svcPrice, setSvcPrice] = useState('')
 
@@ -101,7 +118,24 @@ export default function KasirPage() {
   const cartSubtotal = cart.reduce((s, c) => s + c.subtotal, 0)
   const cartTotal = Math.max(0, cartSubtotal - discount)
 
-  // ── Add to cart from quick select ──────────────────────────────────
+  // ── Load draft on mount ─────────────────────────────────────────────
+  useEffect(() => {
+    const draft = loadDraft()
+    if (draft) {
+      setPlatNomor(draft.platNomor)
+      setCustomerName(draft.customerName)
+      setVehicleType(draft.vehicleType)
+      setCart(draft.cart)
+      setDiscount(draft.discount)
+    }
+  }, [])
+
+  // ── Auto-save draft on changes ──────────────────────────────────────
+  useEffect(() => {
+    if (step !== 'input') return
+    saveDraft({ platNomor, customerName, vehicleType, cart, discount })
+  }, [platNomor, customerName, vehicleType, cart, discount, step])
+
   function addQuickService(service: { name: string; price: number }) {
     const existing = cart.find((c) => c.serviceName === service.name)
     if (existing) {
@@ -115,7 +149,6 @@ export default function KasirPage() {
     }
   }
 
-  // ── Add to cart from manual input ──────────────────────────────────
   function addManualService() {
     const name = svcName.trim()
     const price = parseInt(svcPrice.replace(/\D/g, ''), 10) || 0
@@ -125,14 +158,11 @@ export default function KasirPage() {
     const existing = cart.find((c) => c.serviceName === name)
     if (existing) {
       setCart(cart.map((c) =>
-        c.serviceName === name
-          ? { ...c, quantity: c.quantity + 1, subtotal: (c.quantity + 1) * c.price }
-          : c
+        c.serviceName === name ? { ...c, quantity: c.quantity + 1, subtotal: (c.quantity + 1) * c.price } : c
       ))
     } else {
       setCart([...cart, { serviceName: name, price, quantity: 1, subtotal: price }])
     }
-
     setSvcName('')
     setSvcPrice('')
     setError('')
@@ -145,9 +175,7 @@ export default function KasirPage() {
   function updateQty(serviceName: string, qty: number) {
     if (qty <= 0) { removeFromCart(serviceName); return }
     setCart(cart.map((c) =>
-      c.serviceName === serviceName
-        ? { ...c, quantity: qty, subtotal: qty * c.price }
-        : c
+      c.serviceName === serviceName ? { ...c, quantity: qty, subtotal: qty * c.price } : c
     ))
   }
 
@@ -162,9 +190,9 @@ export default function KasirPage() {
     setSvcName('')
     setSvcPrice('')
     setError('')
+    clearDraft()
   }
 
-  // ── Validation before confirm ───────────────────────────────────────
   function handleProceed() {
     setError('')
     if (!platNomor.trim()) { setError('Plat nomor WAJIB diisi.'); return }
@@ -172,7 +200,6 @@ export default function KasirPage() {
     setStep('confirm')
   }
 
-  // ── Process payment ────────────────────────────────────────────────
   async function handlePay() {
     if (paymentMethod === 'CASH') {
       const paid = parseInt(paymentAmount.replace(/\D/g, ''), 10) || 0
@@ -217,7 +244,6 @@ export default function KasirPage() {
       }
 
       const tx: any = data
-
       setReceipt({
         id: tx.id,
         invoiceNumber: tx.invoiceNumber,
@@ -239,6 +265,7 @@ export default function KasirPage() {
         paymentAmount: paidAmount,
         change: paymentMethod === 'CASH' ? paidAmount - cartTotal : 0,
       })
+      clearDraft()
       setStep('done')
       setShowReceipt(true)
     } catch (err) {
@@ -251,305 +278,260 @@ export default function KasirPage() {
   const cashPaid = parseInt(paymentAmount.replace(/\D/g, ''), 10) || 0
   const changeAmount = paymentMethod === 'CASH' ? Math.max(0, cashPaid - cartTotal) : 0
 
-  // ── Render: Input Step ───────────────────────────────────────────────
+  // ── Input Step ──────────────────────────────────────────────────────
   if (step === 'input') {
     return (
       <div className="space-y-4">
-        {/* Header */}
-        <div>
-          <h1 className="text-xl font-bold text-white">Transaksi Baru</h1>
-          <p className="text-sm text-gray-500">
-            {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-          </p>
+        <div className="page-header mb-0">
+          <h1>Transaksi Baru</h1>
+          <p>{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </div>
 
-        {/* Info Row: Plat + Nama */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Info Kendaraan</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Plat Nomor *</label>
-              <input
-                type="text"
-                value={platNomor}
-                onChange={(e) => setPlatNomor(e.target.value.toUpperCase())}
-                placeholder="B 1234 XYZ"
-                className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-lg px-3 py-2.5 uppercase placeholder:text-gray-500 focus:outline-none focus:border-blue-500"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Nama Pelanggan</label>
-              <input
-                type="text"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="(opsional)"
-                className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-lg px-3 py-2.5 placeholder:text-gray-500 focus:outline-none focus:border-blue-500"
-              />
+        {/* Info Row */}
+        <div className="card">
+          <div className="px-5 pt-5 pb-0">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Info Kendaraan</p>
+          </div>
+          <div className="px-5 pb-5 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Plat Nomor *</label>
+                <input type="text" value={platNomor} onChange={(e) => setPlatNomor(e.target.value.toUpperCase())}
+                  placeholder="B 1234 XYZ" autoFocus
+                  className="w-full bg-background border border-border text-foreground text-sm rounded-lg px-3 py-2.5 uppercase placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Nama Pelanggan</label>
+                <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="(opsional)"
+                  className="w-full bg-background border border-border text-foreground text-sm rounded-lg px-3 py-2.5 placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors" />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Vehicle Type Tabs */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <div className="flex border-b border-gray-800">
+        {/* Vehicle Tabs + Quick Services */}
+        <div className="card overflow-hidden">
+          <div className="flex border-b border-border">
             {VEHICLE_TABS.map((tab) => (
-              <button
-                key={tab.value}
-                onClick={() => setVehicleType(tab.value)}
+              <button key={tab.value} onClick={() => setVehicleType(tab.value)}
                 className={`flex-1 py-3 text-sm font-medium transition-colors ${
                   vehicleType === tab.value
-                    ? 'bg-blue-600 text-white border-b-2 border-blue-400'
-                    : 'text-gray-500 hover:text-white hover:bg-gray-800'
-                }`}
-              >
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                }`}>
                 {tab.label}
               </button>
             ))}
           </div>
 
-          {/* Quick Add Services */}
-          <div className="p-4 space-y-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Pilih Layanan</h3>
+          <div className="p-5 space-y-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pilih Layanan</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {QUICK_SERVICES[vehicleType].map((svc) => (
-                <button
-                  key={svc.name}
-                  onClick={() => addQuickService(svc)}
-                  className="bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-blue-500/50 rounded-xl p-3 text-left transition-all active:scale-95"
-                >
-                  <p className="text-white text-sm font-medium leading-tight">{svc.name}</p>
-                  <p className="text-green-400 text-sm font-bold mt-1">{formatRupiah(svc.price)}</p>
+                <button key={svc.name} onClick={() => addQuickService(svc)}
+                  className="bg-background hover:bg-accent border border-border hover:border-primary/40 rounded-xl p-3 text-left transition-all active:scale-[0.98]">
+                  <p className="text-foreground text-sm font-medium leading-tight">{svc.name}</p>
+                  <p className="text-emerald-600 text-sm font-bold mt-1">{formatRupiah(svc.price)}</p>
                 </button>
               ))}
             </div>
-          </div>
 
-          {/* Manual Add */}
-          <div className="p-4 pt-0 space-y-3">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">+ Tambah Manual</h3>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={svcName}
-                onChange={(e) => setSvcName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addManualService()}
-                placeholder="Nama layanan baru..."
-                className="flex-1 bg-gray-800 border border-gray-700 text-white text-sm rounded-lg px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:border-blue-500"
-              />
-              <input
-                type="text"
-                value={svcPrice}
-                onChange={(e) => {
-                  const raw = e.target.value.replace(/\D/g, '')
-                  setSvcPrice(raw ? parseInt(raw, 10).toLocaleString('id-ID') : '')
-                }}
-                onKeyDown={(e) => e.key === 'Enter' && addManualService()}
-                placeholder="Rp 0"
-                className="w-32 bg-gray-800 border border-gray-700 text-white text-sm rounded-lg px-3 py-2 placeholder:text-gray-500 focus:outline-none focus:border-blue-500 text-right"
-              />
-              <button
-                onClick={addManualService}
-                className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg active:scale-95 transition-transform"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
+            {/* Manual Add */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">+ Tambah Manual</p>
+              <div className="flex gap-2">
+                <input type="text" value={svcName} onChange={(e) => setSvcName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addManualService()}
+                  placeholder="Nama layanan baru..."
+                  className="flex-1 bg-background border border-border text-foreground text-sm rounded-lg px-3 py-2 placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors" />
+                <input type="text" value={svcPrice} onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, '')
+                    setSvcPrice(raw ? parseInt(raw, 10).toLocaleString('id-ID') : '')
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && addManualService()}
+                  placeholder="Rp 0"
+                  className="w-32 bg-background border border-border text-foreground text-sm rounded-lg px-3 py-2 placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors text-right" />
+                <button onClick={addManualService}
+                  className="btn-primary p-2 rounded-lg active:scale-[0.98] transition-transform">
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Cart Summary */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+        {/* Cart */}
+        <div className="card overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
             <div className="flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-gray-500" />
-              <span className="text-sm font-semibold text-gray-300">Keranjang</span>
+              <ShoppingCart className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Keranjang</span>
               {cart.length > 0 && (
-                <span className="bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">
+                <span className="bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full font-bold">
                   {cart.reduce((s, c) => s + c.quantity, 0)}
                 </span>
               )}
             </div>
             {cart.length > 0 && (
-              <button onClick={() => setCart([])} className="text-xs text-red-400 hover:text-red-300">
-                Hapus semua
-              </button>
+              <button onClick={() => setCart([])} className="text-xs text-red-500 hover:text-red-600 font-medium">Hapus semua</button>
             )}
           </div>
 
-          <div className="divide-y divide-gray-800 max-h-48 overflow-y-auto">
+          <div className="divide-y divide-border max-h-48 overflow-y-auto">
             {cart.length === 0 ? (
-              <div className="px-4 py-8 text-center text-gray-600 text-sm">
+              <div className="px-5 py-8 text-center text-muted-foreground text-sm">
                 Belum ada layanan dipilih
               </div>
             ) : cart.map((entry) => (
-              <div key={entry.serviceName} className="flex items-center gap-2 px-4 py-2.5">
+              <div key={entry.serviceName} className="flex items-center gap-2 px-5 py-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm truncate">{entry.serviceName}</p>
-                  <p className="text-gray-500 text-xs">{formatRupiah(entry.price)} × {entry.quantity}</p>
+                  <p className="text-foreground text-sm font-medium truncate">{entry.serviceName}</p>
+                  <p className="text-muted-foreground text-xs">{formatRupiah(entry.price)} × {entry.quantity}</p>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <button onClick={() => updateQty(entry.serviceName, entry.quantity - 1)}
-                    className="w-7 h-7 bg-gray-800 hover:bg-gray-700 rounded text-gray-400 flex items-center justify-center">
+                    className="w-7 h-7 bg-background hover:bg-accent border border-border rounded flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
                     <span className="text-sm">−</span>
                   </button>
-                  <span className="w-8 text-center text-white text-sm font-medium">{entry.quantity}</span>
+                  <span className="w-8 text-center text-foreground text-sm font-medium">{entry.quantity}</span>
                   <button onClick={() => updateQty(entry.serviceName, entry.quantity + 1)}
-                    className="w-7 h-7 bg-gray-800 hover:bg-gray-700 rounded text-gray-400 flex items-center justify-center">
+                    className="w-7 h-7 bg-background hover:bg-accent border border-border rounded flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <span className="text-green-400 text-sm font-semibold min-w-[80px] text-right">
+                <span className="text-emerald-600 text-sm font-semibold min-w-[80px] text-right">
                   {formatRupiah(entry.subtotal)}
                 </span>
                 <button onClick={() => removeFromCart(entry.serviceName)}
-                  className="text-gray-600 hover:text-red-400 p-1">
+                  className="text-muted-foreground hover:text-red-500 p-1 transition-colors">
                   <X className="w-4 h-4" />
                 </button>
               </div>
             ))}
           </div>
 
-          {/* Totals */}
           {cart.length > 0 && (
-            <div className="px-4 py-3 border-t border-gray-800 space-y-2">
-              <div className="flex justify-between text-sm text-gray-400">
-                <span>Subtotal</span>
-                <span>{formatRupiah(cartSubtotal)}</span>
+            <div className="px-5 py-4 border-t border-border space-y-2">
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Subtotal</span><span>{formatRupiah(cartSubtotal)}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-400">Diskon</span>
+                <span className="text-muted-foreground">Diskon</span>
                 <div className="flex items-center gap-1">
-                  <span className="text-orange-500">−</span>
-                  <input
-                    type="text"
-                    value={discount > 0 ? formatRupiah(discount) : ''}
+                  <span className="text-red-500">−</span>
+                  <input type="text" value={discount > 0 ? formatRupiah(discount) : ''}
                     onChange={(e) => {
                       const raw = e.target.value.replace(/[^0-9]/g, '')
                       setDiscount(parseInt(raw, 10) || 0)
                     }}
                     placeholder="Rp 0"
-                    className="bg-transparent text-right text-white w-28 text-sm border-b border-gray-700 focus:border-blue-500 outline-none"
-                  />
+                    className="bg-transparent text-right text-foreground w-28 text-sm border-b border-border focus:border-primary outline-none transition-colors" />
                 </div>
               </div>
-              <div className="flex justify-between text-lg font-bold text-white pt-2 border-t border-gray-800">
+              <div className="flex justify-between text-lg font-bold text-foreground pt-2 border-t border-border">
                 <span>TOTAL</span>
-                <span className="text-green-400">{formatRupiah(cartTotal)}</span>
+                <span className="text-emerald-600">{formatRupiah(cartTotal)}</span>
               </div>
             </div>
           )}
         </div>
 
         {error && (
-          <div className="bg-red-900/30 border border-red-800 text-red-400 text-sm px-4 py-3 rounded-xl">
+          <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl">
             {error}
           </div>
         )}
 
-        <Button
-          onClick={handleProceed}
-          disabled={!platNomor.trim() || cart.length === 0}
-          className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-4 text-base font-bold rounded-xl"
-        >
+        <Button onClick={handleProceed} disabled={!platNomor.trim() || cart.length === 0}
+          className="w-full btn-primary shadow-sm text-base py-3.5 font-semibold rounded-xl">
           Lanjut ke Pembayaran →
         </Button>
       </div>
     )
   }
 
-  // ── Render: Confirm Step ───────────────────────────────────────────
+  // ── Confirm Step ────────────────────────────────────────────────────
   if (step === 'confirm') {
     return (
       <div className="space-y-4">
-        <div>
-          <h1 className="text-xl font-bold text-white">Konfirmasi Pembayaran</h1>
+        <div className="page-header mb-0">
+          <h1>Konfirmasi Pembayaran</h1>
         </div>
 
-        {/* Summary Card */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500 uppercase tracking-wider">Kendaraan</span>
+        <div className="card">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Kendaraan</span>
             <div className="text-right">
-              <p className="text-white font-bold text-sm">{platNomor}</p>
-              <p className="text-gray-500 text-xs">{vehicleType} {customerName && `· ${customerName}`}</p>
+              <p className="font-bold text-foreground text-sm">{platNomor}</p>
+              <p className="text-muted-foreground text-xs">{vehicleType} {customerName && `· ${customerName}`}</p>
             </div>
           </div>
-          <div className="border-t border-gray-800 pt-3 space-y-2">
+          <div className="px-5 py-4 space-y-2.5">
             {cart.map((entry) => (
               <div key={entry.serviceName} className="flex justify-between text-sm">
-                <span className="text-gray-400">{entry.serviceName} ×{entry.quantity}</span>
-                <span className="text-white">{formatRupiah(entry.subtotal)}</span>
+                <span className="text-muted-foreground">{entry.serviceName} ×{entry.quantity}</span>
+                <span className="text-foreground">{formatRupiah(entry.subtotal)}</span>
               </div>
             ))}
           </div>
           {discount > 0 && (
-            <div className="flex justify-between text-sm text-orange-400">
+            <div className="px-5 pb-4 flex justify-between text-sm text-red-500">
               <span>Diskon</span><span>−{formatRupiah(discount)}</span>
             </div>
           )}
-          <div className="flex justify-between text-xl font-bold border-t border-gray-800 pt-3">
-            <span className="text-white">TOTAL</span>
-            <span className="text-green-400">{formatRupiah(cartTotal)}</span>
+          <div className="px-5 pb-5 flex justify-between text-xl font-bold border-t border-border pt-4">
+            <span className="text-foreground">TOTAL</span>
+            <span className="text-emerald-600">{formatRupiah(cartTotal)}</span>
           </div>
         </div>
 
-        {/* Payment Method */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Metode Bayar</h3>
-          <div className="grid grid-cols-3 gap-2">
-            {(['CASH', 'TRANSFER', 'QRIS'] as PayMethod[]).map((m) => (
-              <button key={m} onClick={() => { setPaymentMethod(m); setPaymentAmount('') }}
-                className={`py-3 rounded-xl text-sm font-semibold transition-all ${
-                  paymentMethod === m
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-900'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                }`}>
-                {PAY_LABELS[m]}
-              </button>
-            ))}
+        <div className="card">
+          <div className="px-5 pt-5 pb-0">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Metode Bayar</p>
           </div>
-
-          {paymentMethod === 'CASH' && (
-            <div className="space-y-2">
-              <input
-                type="text"
-                value={paymentAmount}
-                onChange={(e) => {
-                  const raw = e.target.value.replace(/\D/g, '')
-                  setPaymentAmount(raw ? parseInt(raw, 10).toLocaleString('id-ID') : '')
-                }}
-                placeholder="Jumlah uang diterima (Rp)"
-                className="w-full bg-gray-800 border border-gray-700 text-white text-base rounded-lg px-4 py-3 placeholder:text-gray-500 focus:outline-none focus:border-blue-500 text-center font-mono"
-                autoFocus
-              />
-              {cashPaid >= cartTotal && cashPaid > 0 && (
-                <p className="text-center text-sm text-green-400 font-semibold">
-                  Kembalian: {formatRupiah(cashPaid - cartTotal)}
-                </p>
-              )}
+          <div className="px-5 pb-5 space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              {(['CASH', 'TRANSFER', 'QRIS'] as PayMethod[]).map((m) => (
+                <button key={m} onClick={() => { setPaymentMethod(m); setPaymentAmount('') }}
+                  className={`py-3 rounded-xl text-sm font-semibold transition-all ${
+                    paymentMethod === m
+                      ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
+                      : 'bg-background border border-border text-muted-foreground hover:bg-accent hover:text-foreground'
+                  }`}>
+                  {PAY_LABELS[m]}
+                </button>
+              ))}
             </div>
-          )}
+
+            {paymentMethod === 'CASH' && (
+              <div className="space-y-2">
+                <input type="text" value={paymentAmount} onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, '')
+                    setPaymentAmount(raw ? parseInt(raw, 10).toLocaleString('id-ID') : '')
+                  }}
+                  placeholder="Jumlah uang diterima (Rp)" autoFocus
+                  className="w-full bg-background border border-border text-foreground text-base rounded-xl px-4 py-3 placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary text-center font-mono" />
+                {cashPaid >= cartTotal && cashPaid > 0 && (
+                  <p className="text-center text-sm text-emerald-600 font-semibold">
+                    Kembalian: {formatRupiah(cashPaid - cartTotal)}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {error && (
-          <div className="bg-red-900/30 border border-red-800 text-red-400 text-sm px-4 py-3 rounded-xl">
-            {error}
-          </div>
+          <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl">{error}</div>
         )}
 
         <div className="flex gap-2">
-          <Button onClick={() => { setStep('input'); setError('') }}
-            variant="outline"
-            className="flex-1 border-gray-700 text-gray-300 py-4">
+          <Button onClick={() => { setStep('input'); setError('') }} variant="outline" className="flex-1 py-3">
             <ArrowLeft className="w-4 h-4 mr-2" /> Kembali
           </Button>
-          <Button
-            onClick={handlePay}
-            disabled={processing}
-            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-4 text-base font-bold rounded-xl"
-          >
+          <Button onClick={handlePay} disabled={processing}
+            className="flex-1 btn-primary shadow-sm py-3 font-semibold rounded-xl">
             {processing ? 'Memproses...' : '✓ Bayar Sekarang'}
           </Button>
         </div>
@@ -557,30 +539,26 @@ export default function KasirPage() {
     )
   }
 
-  // ── Render: Done Step ───────────────────────────────────────────────
+  // ── Done Step ────────────────────────────────────────────────────────
   if (step === 'done') {
     return (
       <>
         <div className="space-y-4">
-          <div className="bg-emerald-900/20 border border-emerald-800 rounded-xl p-6 text-center space-y-3">
-            <div className="w-12 h-12 bg-emerald-600 rounded-full flex items-center justify-center mx-auto">
-              <Check className="w-7 h-7 text-white" />
+          <div className="card p-6 text-center space-y-3">
+            <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
+              <Check className="w-7 h-7 text-emerald-600" />
             </div>
-            <h2 className="text-xl font-bold text-white">Transaksi Berhasil!</h2>
-            <p className="text-gray-400 text-sm">Struk dapat dicetak di bawah ini.</p>
+            <h2 className="text-xl font-bold text-foreground">Transaksi Berhasil!</h2>
+            <p className="text-muted-foreground text-sm">Struk dapat dicetak di bawah ini.</p>
           </div>
 
-          <Button
-            onClick={() => setShowReceipt(true)}
-            className="w-full border border-gray-700 text-gray-300 py-4"
-          >
+          <Button onClick={() => setShowReceipt(true)}
+            className="w-full btn-primary shadow-sm py-3">
             <Printer className="w-4 h-4 mr-2" /> Lihat & Cetak Struk
           </Button>
 
-          <Button
-            onClick={resetForm}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 font-bold rounded-xl"
-          >
+          <Button onClick={resetForm}
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm py-3 font-semibold rounded-xl">
             + Transaksi Baru
           </Button>
         </div>
@@ -594,26 +572,17 @@ export default function KasirPage() {
   return null
 }
 
-// ── Receipt Modal ────────────────────────────────────────────────────────
-function ReceiptDialog({
-  receipt,
-  open,
-  onClose,
-}: {
-  receipt: TransactionResult
-  open: boolean
-  onClose: () => void
-}) {
+function ReceiptDialog({ receipt, open, onClose }: { receipt: TransactionResult; open: boolean; onClose: () => void }) {
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm p-0 overflow-hidden bg-gray-900 border-gray-800">
-        <div className="p-4 border-b border-gray-800 flex items-center justify-between">
-          <h3 className="text-white font-bold">Struk Transaksi</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
+      <DialogContent className="max-w-sm p-0 overflow-hidden bg-card border-border">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h3 className="font-semibold text-foreground">Struk Transaksi</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-accent">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-4">
+        <div className="p-5">
           <Receipt
             data={{
               invoiceNumber: receipt.invoiceNumber,
