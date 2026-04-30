@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifySession, SESSION_COOKIE_NAME } from '@/lib/auth'
 
+import { revalidatePath } from 'next/cache'
+
 export const dynamic = 'force-dynamic'
 
 async function getSession(request: NextRequest) {
@@ -21,6 +23,9 @@ export async function POST(request: NextRequest) {
     // DELETE items first, then transactions (respecting FK constraint)
     await prisma.$executeRaw`DELETE FROM "TransactionItem" CASCADE`
     await prisma.$executeRaw`DELETE FROM "Transaction" CASCADE`
+
+    // Clear Next.js cache so the dashboard and reports get fresh data
+    revalidatePath('/', 'layout')
 
     return NextResponse.json({ success: true, message: 'Semua data transaksi berhasil dihapus.' })
   } catch (error: any) {

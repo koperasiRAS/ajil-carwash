@@ -14,7 +14,6 @@ import {
   Car,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { SESSION_COOKIE_NAME } from '@/lib/auth'
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -26,9 +25,13 @@ const NAV_ITEMS = [
 
 const MOBILE_NAV = NAV_ITEMS
 
-function handleLogout(router: ReturnType<typeof useRouter>, logout: () => void) {
-  // 1. Clear the httpOnly cookie
-  document.cookie = `${SESSION_COOKIE_NAME}=; Max-Age=0; path=/; SameSite=Lax`
+async function handleLogout(router: ReturnType<typeof useRouter>, logout: () => void) {
+  try {
+    // 1. Call server API to clear the httpOnly cookie
+    await fetch('/api/auth/logout', { method: 'POST' })
+  } catch (error) {
+    console.error('Logout error:', error)
+  }
   // 2. Clear zustand store
   logout()
   // 3. Full page redirect to login
