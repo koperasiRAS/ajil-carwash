@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifySession, SESSION_COOKIE_NAME } from '@/lib/auth'
-
 import { revalidatePath } from 'next/cache'
 
 export const dynamic = 'force-dynamic'
@@ -19,12 +18,17 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Use raw SQL to bypass any Prisma-level caching
-    // DELETE items first, then transactions (respecting FK constraint)
-    await prisma.$executeRaw`DELETE FROM "TransactionItem" CASCADE`
-    await prisma.$executeRaw`DELETE FROM "Transaction" CASCADE`
+    // Use Prisma transaction to delete items first (respect FK constraint),
+    // then transactions. This is more reliable than raw SQL CASCADE.
+    await prisma.$transaction(async (tx) => {
+      // Delete all transaction items
+      await tx.transactionItem.deleteMany({})
+      // Delete all transactions
+      await tx.transaction.deleteMany({})
+    })
 
-    // Clear Next.js cache so the dashboard, reports and transactions pages get fresh data
+    // Invalidate Next.js cache so dashboard, transactions, and reports
+    // pages get fresh data immediately
     revalidatePath('/', 'layout')
     revalidatePath('/dashboard')
     revalidatePath('/transactions')

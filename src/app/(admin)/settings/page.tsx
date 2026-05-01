@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Settings, Save, Download, CheckCircle, Trash2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +21,7 @@ function loadSettings(): SystemSettings {
 }
 
 export default function SettingsPage() {
+  const router = useRouter()
   const [settings, setSettings] = useState<SystemSettings>({ businessName: 'Ajil Car Wash', businessAddress: '', businessPhone: '' })
   const [original, setOriginal] = useState<SystemSettings | null>(null)
   const [saved, setSaved] = useState(false)
@@ -91,7 +93,7 @@ export default function SettingsPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Gagal menghapus data')
       // Redirect to dashboard to confirm fresh state
-      window.location.href = '/dashboard'
+      router.replace('/dashboard')
     } catch (err) {
       setClearError(err instanceof Error ? err.message : 'Gagal menghapus data')
       setClearing(false)
