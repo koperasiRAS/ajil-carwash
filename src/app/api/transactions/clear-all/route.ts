@@ -24,8 +24,11 @@ export async function POST(request: NextRequest) {
     await prisma.$executeRaw`DELETE FROM "TransactionItem" CASCADE`
     await prisma.$executeRaw`DELETE FROM "Transaction" CASCADE`
 
-    // Clear Next.js cache so the dashboard and reports get fresh data
+    // Clear Next.js cache so the dashboard, reports and transactions pages get fresh data
     revalidatePath('/', 'layout')
+    revalidatePath('/dashboard')
+    revalidatePath('/transactions')
+    revalidatePath('/reports')
 
     return NextResponse.json({ success: true, message: 'Semua data transaksi berhasil dihapus.' })
   } catch (error: any) {

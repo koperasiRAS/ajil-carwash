@@ -27,15 +27,16 @@ const MOBILE_NAV = NAV_ITEMS
 
 async function handleLogout(router: ReturnType<typeof useRouter>, logout: () => void) {
   try {
-    // 1. Call server API to clear the httpOnly cookie
+    // 1. Call server API to clear the httpOnly cookie — await to ensure it completes
     await fetch('/api/auth/logout', { method: 'POST' })
   } catch (error) {
     console.error('Logout error:', error)
+  } finally {
+    // 2. Clear zustand store
+    logout()
+    // 3. Navigate to login — use router.replace to avoid history stack issues
+    router.replace('/login')
   }
-  // 2. Clear zustand store
-  logout()
-  // 3. Full page redirect to login
-  window.location.href = '/login'
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import prisma from '@/lib/prisma'
 import { verifySession, SESSION_COOKIE_NAME } from '@/lib/auth'
 import { generateInvoiceNumber } from '@/lib/invoice'
+import { revalidatePath } from 'next/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -140,6 +141,9 @@ export async function POST(request: NextRequest) {
         items: true,
       },
     })
+
+    // Invalidate Next.js cache so dashboard/reports/transactions get fresh data
+    revalidatePath('/', 'layout')
 
     return NextResponse.json(tx, { status: 201 })
   } catch (error) {

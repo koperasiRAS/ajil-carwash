@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifySession, SESSION_COOKIE_NAME } from '@/lib/auth'
+import { revalidatePath } from 'next/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,6 +45,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
         voidAt: new Date(),
       },
     })
+
+    // Invalidate Next.js cache so dashboard/reports/transactions get fresh data
+    revalidatePath('/', 'layout')
 
     return NextResponse.json({ success: true })
   } catch (error) {
