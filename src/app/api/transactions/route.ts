@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import { verifySession, SESSION_COOKIE_NAME } from '@/lib/auth'
 import { generateInvoiceNumber } from '@/lib/invoice'
 import { revalidatePath } from 'next/cache'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,14 +104,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate unique invoice
+    // Generate unique invoice inside a transaction to avoid race conditions
     let invoiceNumber = generateInvoiceNumber()
     let attempts = 0
-    while (attempts < 5) {
+    while (attempts < 10) {
       const existing = await prisma.transaction.findUnique({ where: { invoiceNumber } })
       if (!existing) break
       invoiceNumber = generateInvoiceNumber()
       attempts++
+    }
+    if (attempts === 10) {
+      return NextResponse.json({ error: 'Gagal membuat nomor invoice unik' }, { status: 500 })
     }
 
     const tx = await prisma.transaction.create({
@@ -147,7 +151,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(tx, { status: 201 })
   } catch (error) {
-    console.error('Create transaction error:', error)
+    logger.error('Create transaction error', { error: String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

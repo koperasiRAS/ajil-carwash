@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { logger } from '@/lib/logger'
 
 interface ExportButtonProps {
   data: Record<string, unknown>[]
@@ -35,7 +36,7 @@ export function ExportButton({ data, filename, sheets, className }: ExportButton
 
       XLSX.writeFile(wb, `${filename}-${new Date().toISOString().slice(0, 10)}.xlsx`)
     } catch (err) {
-      console.error('Export error:', err)
+      logger.error('Export Excel error', { error: String(err) })
     } finally {
       setExporting(false)
     }
@@ -63,7 +64,7 @@ export function ExportButton({ data, filename, sheets, className }: ExportButton
 
       doc.save(`${filename}-${new Date().toISOString().slice(0, 10)}.pdf`)
     } catch (err) {
-      console.error('Export error:', err)
+      logger.error('Export PDF error', { error: String(err) })
     } finally {
       setExporting(false)
     }

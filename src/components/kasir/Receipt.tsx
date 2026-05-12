@@ -4,6 +4,7 @@ import { useRef } from 'react'
 import { useReactToPrint } from 'react-to-print'
 import { Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { formatRupiah } from '@/lib/invoice'
 
 interface TxItem {
   serviceName: string
@@ -35,14 +36,6 @@ interface ReceiptData {
 interface ReceiptProps {
   data: ReceiptData
   onPrinted?: () => void
-}
-
-function formatRupiah(n: number) {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
-  }).format(n)
 }
 
 function formatDate(iso: string) {

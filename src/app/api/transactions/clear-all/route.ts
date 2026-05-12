@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifySession, SESSION_COOKIE_NAME } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,34 +12,41 @@ async function getSession(request: NextRequest) {
   return verifySession(token)
 }
 
-export async function POST(request: NextRequest) {
+// Changed from POST to DELETE with confirmation token safeguard
+export async function DELETE(request: NextRequest) {
   const session = await getSession(request)
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const confirm = request.nextUrl.searchParams.get('confirm')
+  if (confirm !== 'DELETE_ALL_TRANSACTIONS') {
+    return NextResponse.json(
+      { error: 'Confirmation required. Pass ?confirm=DELETE_ALL_TRANSACTIONS' },
+      { status: 400 }
+    )
+  }
+
   try {
-    // Use Prisma transaction to delete items first (respect FK constraint),
-    // then transactions. This is more reliable than raw SQL CASCADE.
+    const count = await prisma.transaction.count()
+
     await prisma.$transaction(async (tx) => {
-      // Delete all transaction items
       await tx.transactionItem.deleteMany({})
-      // Delete all transactions
       await tx.transaction.deleteMany({})
     })
 
-    // Invalidate Next.js cache so dashboard, transactions, and reports
-    // pages get fresh data immediately
+    logger.info('All transactions cleared', { count, userId: session.userId })
+
     revalidatePath('/', 'layout')
     revalidatePath('/dashboard')
     revalidatePath('/transactions')
     revalidatePath('/reports')
 
-    return NextResponse.json({ success: true, message: 'Semua data transaksi berhasil dihapus.' })
-  } catch (error: any) {
-    console.error('Clear all data error:', error)
+    return NextResponse.json({ success: true, message: `${count} transaksi berhasil dihapus.` })
+  } catch (error) {
+    logger.error('Clear all transactions error', { error: String(error) })
     return NextResponse.json(
-      { error: error?.message || 'Gagal menghapus data' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

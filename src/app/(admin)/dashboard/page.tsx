@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { formatRupiah } from '@/lib/invoice'
+import { logger } from '@/lib/logger'
 import {
   TrendingUp,
   Receipt,
@@ -62,6 +63,7 @@ export default function DashboardPage() {
   const [recentTx, setRecentTx] = useState<Transaction[]>([])
   const [weekOmzet, setWeekOmzet] = useState<DayOmzet[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null)
 
   const todayTx = transactions.filter((t) => t.status === 'COMPLETED')
@@ -80,9 +82,13 @@ export default function DashboardPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
       const res = await fetch('/api/transactions?page=1&limit=100')
-      if (!res.ok) return
+      if (!res.ok) {
+        setError('Gagal memuat data. Periksa koneksi Anda.')
+        return
+      }
       const data = await res.json()
       const txList: Transaction[] = data.transactions ?? []
       setTransactions(txList)
@@ -105,7 +111,8 @@ export default function DashboardPage() {
       }
       setWeekOmzet(days)
     } catch (e) {
-      console.error('Dashboard load error:', e)
+      setError('Terjadi kesalahan saat memuat data')
+      logger.error('Dashboard load error', { error: String(e) })
     } finally {
       setLoading(false)
     }
@@ -149,6 +156,16 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={loadData} className="font-medium underline hover:text-red-800">
+            Coba Lagi
+          </button>
+        </div>
+      )}
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="stat-card">
@@ -158,10 +175,19 @@ export default function DashboardPage() {
               <TrendingUp className="w-4 h-4 text-emerald-600" />
             </div>
           </div>
-          <p className="text-2xl lg:text-3xl font-bold text-emerald-600">
-            {loading ? '—' : formatRupiah(omzetToday)}
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">{txCount} transaksi hari ini</p>
+          {loading ? (
+            <div className="animate-pulse space-y-2">
+              <div className="h-8 bg-muted rounded w-36"></div>
+              <div className="h-4 bg-muted rounded w-24"></div>
+            </div>
+          ) : (
+            <>
+              <p className="text-2xl lg:text-3xl font-bold text-emerald-600">
+                {formatRupiah(omzetToday)}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">{txCount} transaksi hari ini</p>
+            </>
+          )}
         </div>
 
         <div className="stat-card">
@@ -171,14 +197,23 @@ export default function DashboardPage() {
               <Receipt className="w-4 h-4 text-blue-600" />
             </div>
           </div>
-          <p className="text-2xl lg:text-3xl font-bold text-foreground">
-            {loading ? '—' : txCount}
-          </p>
-          <div className="flex gap-3 mt-2">
-            <span className="text-xs text-muted-foreground">Motor <span className="font-semibold text-foreground">{txMotor}</span></span>
-            <span className="text-xs text-muted-foreground">Mobil <span className="font-semibold text-foreground">{txMobil}</span></span>
-            <span className="text-xs text-muted-foreground">Lain <span className="font-semibold text-foreground">{txOther}</span></span>
-          </div>
+          {loading ? (
+            <div className="animate-pulse space-y-2">
+              <div className="h-8 bg-muted rounded w-20"></div>
+              <div className="h-4 bg-muted rounded w-32"></div>
+            </div>
+          ) : (
+            <>
+              <p className="text-2xl lg:text-3xl font-bold text-foreground">
+                {txCount}
+              </p>
+              <div className="flex gap-3 mt-2">
+                <span className="text-xs text-muted-foreground">Motor <span className="font-semibold text-foreground">{txMotor}</span></span>
+                <span className="text-xs text-muted-foreground">Mobil <span className="font-semibold text-foreground">{txMobil}</span></span>
+                <span className="text-xs text-muted-foreground">Lain <span className="font-semibold text-foreground">{txOther}</span></span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="stat-card">
@@ -188,10 +223,19 @@ export default function DashboardPage() {
               <Receipt className="w-4 h-4 text-purple-600" />
             </div>
           </div>
-          <p className="text-2xl lg:text-3xl font-bold text-foreground">
-            {loading ? '—' : txCount}
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">unit hari ini</p>
+          {loading ? (
+            <div className="animate-pulse space-y-2">
+              <div className="h-8 bg-muted rounded w-20"></div>
+              <div className="h-4 bg-muted rounded w-24"></div>
+            </div>
+          ) : (
+            <>
+              <p className="text-2xl lg:text-3xl font-bold text-foreground">
+                {txCount}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">unit hari ini</p>
+            </>
+          )}
         </div>
       </div>
 

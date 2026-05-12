@@ -63,8 +63,8 @@ model Transaction {
   voidAt          DateTime?
   createdAt       DateTime          @default(now())
 
-  kasir   User              @relation(fields: [kasirId], references: [id])
-  voidBy  User?             @relation("VoidedBy", fields: [voidById], references: [id])
+  kasir   User              @relation(fields: [kasirId], references: [id], onDelete: Restrict)
+  voidBy  User?             @relation("VoidedBy", fields: [voidById], references: [id], onDelete: SetNull)
   items   TransactionItem[]
 }
 

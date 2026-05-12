@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { signSession, SESSION_COOKIE_NAME, COOKIE_OPTIONS } from '@/lib/auth'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch (error: any) {
-    console.error('Login error:', error)
+    logger.error('Login error', { error: error?.message || String(error) })
     return NextResponse.json(
       { error: error?.message || String(error) || 'Internal server error' },
       { status: 500 }

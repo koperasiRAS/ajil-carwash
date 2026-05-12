@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Settings, Save, Download, CheckCircle, Trash2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { logger } from '@/lib/logger'
 
 interface SystemSettings {
   businessName: string
@@ -79,7 +80,7 @@ export default function SettingsPage() {
       XLSX.utils.book_append_sheet(wb, ws, 'Transaksi')
       XLSX.writeFile(wb, `carwash-export-${new Date().toISOString().slice(0, 10)}.xlsx`)
     } catch (e) {
-      console.error('Export error:', e)
+      logger.error('Export error', { error: String(e) })
     } finally {
       setExporting(false)
     }
@@ -89,7 +90,7 @@ export default function SettingsPage() {
     setClearing(true)
     setClearError('')
     try {
-      const res = await fetch('/api/transactions/clear-all', { method: 'POST' })
+      const res = await fetch('/api/transactions/clear-all?confirm=DELETE_ALL_TRANSACTIONS', { method: 'DELETE' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Gagal menghapus data')
       // Redirect to dashboard to confirm fresh state

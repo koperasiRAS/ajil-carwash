@@ -26,6 +26,26 @@ async function main() {
   })
   console.log('Created admin:', admin.email)
 
+  // ── Service Packages ────────────────────────────────────────────────────────
+  const serviceDefs = [
+    // Motor
+    { name: 'Motor Kecil', vehicleType: 'MOTOR' as const, price: 20000, sortOrder: 1 },
+    { name: 'Motor Besar', vehicleType: 'MOTOR' as const, price: 25000, sortOrder: 2 },
+    // Mobil
+    { name: 'Express Wash', vehicleType: 'MOBIL' as const, price: 30000, sortOrder: 1 },
+    { name: 'Hydraulic Wash', vehicleType: 'MOBIL' as const, price: 40000, sortOrder: 2 },
+    { name: 'Premium Wash', vehicleType: 'MOBIL' as const, price: 50000, sortOrder: 3 },
+    // Pickup
+    { name: 'Express Wash', vehicleType: 'PICKUP' as const, price: 30000, sortOrder: 1 },
+    { name: 'Hydraulic Wash', vehicleType: 'PICKUP' as const, price: 40000, sortOrder: 2 },
+    { name: 'Premium Wash', vehicleType: 'PICKUP' as const, price: 50000, sortOrder: 3 },
+    // Truk
+    { name: 'Express Wash', vehicleType: 'TRUK' as const, price: 30000, sortOrder: 1 },
+    { name: 'Hydraulic Wash', vehicleType: 'TRUK' as const, price: 40000, sortOrder: 2 },
+    { name: 'Premium Wash', vehicleType: 'TRUK' as const, price: 50000, sortOrder: 3 },
+  ]
+  console.log(`✓ ${serviceDefs.length} service packages defined (hardcoded in kasir/page.tsx)`)
+
   console.log('')
   console.log('=== Login Credentials ===')
   console.log('Admin: admin@carwash.com (PIN: 123456)')

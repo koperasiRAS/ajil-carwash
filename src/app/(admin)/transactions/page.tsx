@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { formatRupiah } from '@/lib/invoice'
+import { logger } from '@/lib/logger'
 import {
   Search, FileSpreadsheet,
   ChevronLeft, ChevronRight, Eye, X,
@@ -66,7 +67,9 @@ export default function TransactionsPage() {
       setTransactions(data.transactions ?? [])
       setTotalCount(data.total ?? 0)
       setTotalPages(data.totalPages ?? 1)
-    } catch (e) { console.error('Load tx error:', e) }
+    } catch (e) {
+      logger.error('Load tx error', { error: String(e) })
+    }
     finally { setLoading(false) }
   }, [dateFrom, dateTo, status, vehicleType, search, page])
 

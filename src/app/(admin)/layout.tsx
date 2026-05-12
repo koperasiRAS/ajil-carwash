@@ -12,6 +12,7 @@ import {
   Car,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { logger } from '@/lib/logger'
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -30,7 +31,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
     } catch (error) {
-      console.error('Logout error:', error)
+      logger.error('Logout error', { error: String(error) })
     } finally {
       logout()
       router.replace('/login')

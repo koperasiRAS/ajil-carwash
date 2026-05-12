@@ -1,8 +1,11 @@
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose'
 
-// ── Secret key ────────────────────────────────────────────────────────────────
-function getSecretKey(): Uint8Array {
-  const secret = process.env.JWT_SECRET ?? 'fallback-secret-change-me'
+// ── Secret key (no fallback — fail fast if env var is missing) ─────────────────
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is not set')
+  }
   return new TextEncoder().encode(secret)
 }
 
@@ -19,7 +22,7 @@ export async function signSession(payload: {
   name: string
   email: string
 }): Promise<string> {
-  const secret = getSecretKey()
+  const secret = getJwtSecret()
   return new SignJWT(payload as unknown as JWTPayload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -30,7 +33,7 @@ export async function signSession(payload: {
 // ── Verify & decode a JWT session ────────────────────────────────────────────
 export async function verifySession(token: string): Promise<SessionPayload | null> {
   try {
-    const secret = getSecretKey()
+    const secret = getJwtSecret()
     const { payload } = await jwtVerify(token, secret)
     return payload as SessionPayload
   } catch {

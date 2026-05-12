@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import prisma from '@/lib/prisma'
 import { verifySession, SESSION_COOKIE_NAME } from '@/lib/auth'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -195,7 +196,7 @@ export async function GET(request: NextRequest) {
       transactions: txList,
     })
   } catch (error) {
-    console.error('Reports error:', error)
+    logger.error('Reports error', { error: String(error) })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

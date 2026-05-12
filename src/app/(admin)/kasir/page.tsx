@@ -24,26 +24,26 @@ const PAY_LABELS: Record<PayMethod, string> = {
   QRIS: 'QRIS',
 }
 
+// CAR packages — flat price, no size differentiation
 const QUICK_SERVICES: Record<VehicleType, { name: string; price: number }[]> = {
   MOTOR: [
-    { name: 'Cuci Motor Reguler', price: 15000 },
-    { name: 'Cuci Motor Salon', price: 25000 },
-    { name: 'Cuci + Wax Motor', price: 35000 },
+    { name: 'Motor Kecil', price: 20000 },
+    { name: 'Motor Besar', price: 25000 },
   ],
   MOBIL: [
-    { name: 'Cuci Mobil Reguler', price: 30000 },
-    { name: 'Cuci Mobil Salon', price: 50000 },
-    { name: 'Cuci + Wax Mobil', price: 70000 },
-    { name: 'Poles Mobil', price: 150000 },
-    { name: 'Interior Cleaning', price: 100000 },
+    { name: 'Express Wash', price: 30000 },
+    { name: 'Hydraulic Wash', price: 40000 },
+    { name: 'Premium Wash', price: 50000 },
   ],
   PICKUP: [
-    { name: 'Cuci Pickup', price: 45000 },
-    { name: 'Cuci + Wax Pickup', price: 75000 },
+    { name: 'Express Wash', price: 30000 },
+    { name: 'Hydraulic Wash', price: 40000 },
+    { name: 'Premium Wash', price: 50000 },
   ],
   TRUK: [
-    { name: 'Cuci Truk', price: 75000 },
-    { name: 'Cuci Truk Salon', price: 120000 },
+    { name: 'Express Wash', price: 30000 },
+    { name: 'Hydraulic Wash', price: 40000 },
+    { name: 'Premium Wash', price: 50000 },
   ],
 }
 
