@@ -8,16 +8,18 @@ const globalForPrisma = globalThis as unknown as {
 
 function buildPoolConfig(): PoolConfig {
   const raw = process.env.DATABASE_URL ?? ''
+  let connectionString = raw
+  if (connectionString && !connectionString.includes('pgbouncer=true')) {
+    connectionString += connectionString.includes('?') ? '&pgbouncer=true' : '?pgbouncer=true'
+  }
+
   return {
-    connectionString: raw,
+    connectionString,
     // Increase timeouts for serverless cold starts
     connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000,
     // Max connections for serverless (Supabase pooler handles the rest)
     max: 1,
-    // Disable prepared statements to avoid "s1 already exists" errors
-    // in serverless environments with connection pooling
-    statement_timeout: undefined,
   }
 }
 

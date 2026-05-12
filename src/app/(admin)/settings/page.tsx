@@ -16,8 +16,8 @@ interface SystemSettings {
 const STORAGE_KEY = 'carwash_settings'
 
 function loadSettings(): SystemSettings {
-  if (typeof window === 'undefined') return { businessName: 'Ajil Car Wash', businessAddress: '', businessPhone: '' }
-  const raw = localStorage.getItem(STORAGE_KEY)
+  if (globalThis.window === undefined) return { businessName: 'Ajil Car Wash', businessAddress: '', businessPhone: '' }
+  const raw = globalThis.window.localStorage.getItem(STORAGE_KEY)
   return raw ? JSON.parse(raw) : { businessName: 'Ajil Car Wash', businessAddress: '', businessPhone: '' }
 }
 
@@ -92,11 +92,15 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/transactions/clear-all?confirm=DELETE_ALL_TRANSACTIONS', { method: 'DELETE' })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Gagal menghapus data')
+      if (!res.ok) {
+        throw new Error(json.details || json.error || 'Gagal menghapus data')
+      }
       // Redirect to dashboard to confirm fresh state
       router.replace('/dashboard')
-    } catch (err) {
-      setClearError(err instanceof Error ? err.message : 'Gagal menghapus data')
+    } catch (err: any) {
+      const msg = err.message || 'Gagal menghapus data'
+      setClearError(msg)
+      logger.error('Clear all data error', { error: msg })
       setClearing(false)
     }
   }
@@ -132,21 +136,21 @@ export default function SettingsPage() {
         </div>
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Nama Usaha</label>
-            <Input value={settings.businessName}
+            <label htmlFor="businessName" className="text-xs font-medium text-muted-foreground mb-1 block">Nama Usaha</label>
+            <Input id="businessName" value={settings.businessName}
               onChange={(e) => setSettings((s) => ({ ...s, businessName: e.target.value }))}
               className="max-w-md" />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Alamat</label>
-            <Input value={settings.businessAddress}
+            <label htmlFor="businessAddress" className="text-xs font-medium text-muted-foreground mb-1 block">Alamat</label>
+            <Input id="businessAddress" value={settings.businessAddress}
               onChange={(e) => setSettings((s) => ({ ...s, businessAddress: e.target.value }))}
               placeholder="Jl. example No. 1, Kota"
               className="max-w-md" />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Nomor Telepon</label>
-            <Input value={settings.businessPhone}
+            <label htmlFor="businessPhone" className="text-xs font-medium text-muted-foreground mb-1 block">Nomor Telepon</label>
+            <Input id="businessPhone" value={settings.businessPhone}
               onChange={(e) => setSettings((s) => ({ ...s, businessPhone: e.target.value }))}
               placeholder="08xxxxxxxxxx"
               className="max-w-md" />

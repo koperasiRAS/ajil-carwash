@@ -28,12 +28,15 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    // Delete all transactions in a single transaction
-    // TransactionItems will cascade delete automatically (onDelete: Cascade in schema)
+    // Delete all transactions
+    // We explicitly delete TransactionItem first to be safe, although schema has Cascade
     const count = await prisma.$transaction(async (tx) => {
       const n = await tx.transaction.count()
+      await tx.transactionItem.deleteMany({})
       await tx.transaction.deleteMany({})
       return n
+    }, {
+      timeout: 30000, // 30 seconds timeout for large data sets
     })
 
     logger.info('All transactions cleared', { count, userId: session.userId })
@@ -45,9 +48,13 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: `${count} transaksi berhasil dihapus.` })
   } catch (error) {
-    logger.error('Clear all transactions error', { error: String(error), userId: session?.userId })
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    logger.error('Clear all transactions error', { error: errorMsg, userId: session?.userId })
     return NextResponse.json(
-      { error: 'Gagal menghapus data transaksi. Pastikan tidak ada proses lain yang sedang mengakses data.' },
+      { 
+        error: 'Gagal menghapus data transaksi.',
+        details: errorMsg
+      },
       { status: 500 }
     )
   }

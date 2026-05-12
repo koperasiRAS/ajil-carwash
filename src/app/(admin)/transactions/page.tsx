@@ -71,7 +71,7 @@ export default function TransactionsPage() {
       logger.error('Load tx error', { error: String(e) })
     }
     finally { setLoading(false) }
-  }, [dateFrom, dateTo, status, vehicleType, search, page])
+  }, [dateFrom, dateTo, status, vehicleType, search, page, paymentMethod])
 
   useEffect(() => { loadTx() }, [loadTx])
 
