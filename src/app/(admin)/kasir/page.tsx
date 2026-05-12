@@ -197,24 +197,29 @@ export default function KasirPage() {
     setError('')
     if (!platNomor.trim()) { setError('Plat nomor WAJIB diisi.'); return }
     if (cart.length === 0) { setError('Pilih minimal satu layanan.'); return }
+    // Pre-check cash payment so the user can correct before hitting confirm
+    if (paymentMethod === 'CASH') {
+      const paid = parseInt(paymentAmount.replace(/\D/g, ''), 10) || 0
+      if (paid > 0 && paid < cartTotal) {
+        setError(`Pembayaran kurang dari total (${formatRupiah(cartTotal)}).`)
+        return
+      }
+    }
     setStep('confirm')
   }
 
   async function handlePay() {
-    if (paymentMethod === 'CASH') {
-      const paid = parseInt(paymentAmount.replace(/\D/g, ''), 10) || 0
-      if (paid < cartTotal) {
-        setError(`Pembayaran kurang dari total (${formatRupiah(cartTotal)}).`)
-        return
-      }
+    const paidAmount = parseInt(paymentAmount.replace(/\D/g, ''), 10) || 0
+
+    if (paymentMethod === 'CASH' && paidAmount < cartTotal) {
+      setError(`Pembayaran kurang dari total (${formatRupiah(cartTotal)}).`)
+      return
     }
 
     setProcessing(true)
     setError('')
 
     try {
-      const paidAmount = parseInt(paymentAmount.replace(/\D/g, ''), 10) || 0
-
       const res = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -240,14 +245,14 @@ export default function KasirPage() {
       const data = await res.json()
       if (!res.ok) {
         setError(data.error ?? 'Gagal menyimpan transaksi.')
+        setProcessing(false)
         return
       }
 
-      const tx: any = data
       setReceipt({
-        id: tx.id,
-        invoiceNumber: tx.invoiceNumber,
-        createdAt: tx.createdAt,
+        id: data.id,
+        invoiceNumber: data.invoiceNumber,
+        createdAt: data.createdAt ?? new Date().toISOString(),
         kasirName: user?.name ?? 'Admin',
         customerName,
         platNomor: platNomor.trim().toUpperCase(),

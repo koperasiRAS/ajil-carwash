@@ -28,28 +28,28 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    // Delete all transactions
-    // We explicitly delete TransactionItem first to be safe, although schema has Cascade
-    const count = await prisma.$transaction(async (tx) => {
-      const n = await tx.transaction.count()
-      await tx.transactionItem.deleteMany({})
-      await tx.transaction.deleteMany({})
-      return n
+    // Delete all transactions. Using deleteMany in a $transaction with explicit
+    // ordering: cascade FK targets are deleted first to avoid constraint violations
+    // under poolers (Supavisor/PgBouncer) that don't auto-order FK cascades.
+    let deletedCount = 0
+    await prisma.$transaction(async (tx) => {
+      deletedCount = await tx.transactionItem.deleteMany({})
+      deletedCount = await tx.transaction.deleteMany({})
     }, {
-      timeout: 30000, // 30 seconds timeout for large data sets
+      timeout: 30_000, // 30s — enough for large data sets under cold-start constraints
     })
 
-    logger.info('All transactions cleared', { count, userId: session.userId })
+    logger.info('All transactions cleared', { userId: session.userId })
 
     revalidatePath('/', 'layout')
     revalidatePath('/dashboard')
     revalidatePath('/transactions')
     revalidatePath('/reports')
 
-    return NextResponse.json({ success: true, message: `${count} transaksi berhasil dihapus.` })
+    return NextResponse.json({ success: true })
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
-    logger.error('Clear all transactions error', { error: errorMsg, userId: session?.userId })
+    logger.error('Clear all transactions error', { error: errorMsg, userId: session.userId })
     return NextResponse.json(
       { 
         error: 'Gagal menghapus data transaksi.',

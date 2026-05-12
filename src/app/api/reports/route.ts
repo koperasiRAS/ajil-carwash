@@ -17,46 +17,61 @@ const QuerySchema = z.object({
 })
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+// All date logic uses LOCAL (Indonesia/WIB) timezone via explicit Y/M/D math,
+// NOT UTC-mixed new Date()/toISOString() which breaks range boundaries.
 function getRange(type: string, date?: string, week?: string, month?: string, from?: string, to?: string) {
-  const now = date ? new Date(date) : new Date()
-  const start = new Date()
-  const end = new Date()
+  const now = new Date()
+  const thisYear = now.getFullYear()
 
   switch (type) {
     case 'daily': {
-      start.setHours(0, 0, 0, 0)
-      end.setHours(23, 59, 59, 999)
+      const d = date ? new Date(date + 'T00:00:00') : now
+      const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
+      const end   = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
       return { start, end }
     }
     case 'weekly': {
+      // ISO week format: "2024-W23"  →  week 23
       const weekNum = parseInt((week ?? '').split('-W')[1] ?? '1', 10)
+      // Find Monday of week 1 of this year
+      const jan4 = new Date(thisYear, 0, 4) // Jan 4 is always in week 1
+      const mondayW1 = new Date(jan4)
+      mondayW1.setDate(jan4.getDate() - jan4.getDay() + 1)
+      const start = new Date(mondayW1)
+      start.setDate(mondayW1.getDate() + (weekNum - 1) * 7)
       start.setHours(0, 0, 0, 0)
-      start.setDate(start.getDate() - start.getDay() + 1 + (weekNum - 1) * 7)
-      end.setTime(start.getTime())
-      end.setDate(end.getDate() + 6)
+      const end = new Date(start)
+      end.setDate(start.getDate() + 6)
       end.setHours(23, 59, 59, 999)
       return { start, end }
     }
     case 'monthly': {
       const [y, m] = [(month ?? '').split('-')[0] ?? '', (month ?? '').split('-')[1] ?? '']
-      const year = parseInt(y, 10) || now.getFullYear()
-      const mon = parseInt(m, 10) || now.getMonth() + 1
-      start.setFullYear(year, mon - 1, 1)
-      start.setHours(0, 0, 0, 0)
-      end.setFullYear(year, mon, 0)
-      end.setHours(23, 59, 59, 999)
+      const year = parseInt(y, 10) || thisYear
+      const mon  = parseInt(m, 10) || now.getMonth() + 1
+      const start = new Date(year, mon - 1, 1, 0, 0, 0, 0)
+      const end   = new Date(year, mon, 0, 23, 59, 59, 999) // day 0 = last day of previous month
       return { start, end }
     }
     case 'custom': {
-      start.setHours(0, 0, 0, 0)
-      end.setHours(23, 59, 59, 999)
-      if (from) start.setTime(new Date(from).getTime())
-      if (to) end.setTime(new Date(to).getTime())
+      let start, end
+      if (from) {
+        const d = new Date(from + 'T00:00:00')
+        start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
+      } else {
+        start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+      }
+      if (to) {
+        const d = new Date(to + 'T00:00:00')
+        end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
+      } else {
+        end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+      }
       return { start, end }
     }
     default: {
-      start.setHours(0, 0, 0, 0)
-      end.setHours(23, 59, 59, 999)
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+      const end   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
       return { start, end }
     }
   }

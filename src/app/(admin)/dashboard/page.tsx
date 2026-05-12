@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { formatRupiah } from '@/lib/invoice'
 import { logger } from '@/lib/logger'
@@ -8,7 +8,6 @@ import {
   TrendingUp,
   Receipt,
   X,
-  ArrowUp,
   Plus,
   BarChart3,
   FileSpreadsheet,
@@ -120,18 +119,20 @@ export default function DashboardPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  // Auto-refresh when the date rolls over (midnight rollover)
+  // Uses todayKeyRef to avoid stale closure — does NOT depend on loadData
+  const todayKeyRef = useRef(todayKey)
+  todayKeyRef.current = todayKey
+
   useEffect(() => {
     const id = setInterval(() => {
       const today = new Date().toISOString().slice(0, 10)
-      if (today !== todayKey) {
-        setTodayKey(today)
-        loadData()
-      } else {
-        loadData()
+      if (today !== todayKeyRef.current) {
+        setTodayKey(today) // state change → triggers loadData via its own useEffect
       }
     }, 30_000)
     return () => clearInterval(id)
-  }, [todayKey, loadData])
+  }, []) // stable — no dependencies, ref handles current date
 
   return (
     <div className="space-y-5">

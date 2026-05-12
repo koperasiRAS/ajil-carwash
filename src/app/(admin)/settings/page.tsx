@@ -97,8 +97,8 @@ export default function SettingsPage() {
       }
       // Redirect to dashboard to confirm fresh state
       router.replace('/dashboard')
-    } catch (err: any) {
-      const msg = err.message || 'Gagal menghapus data'
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gagal menghapus data'
       setClearError(msg)
       logger.error('Clear all data error', { error: msg })
       setClearing(false)
@@ -194,7 +194,7 @@ export default function SettingsPage() {
             </div>
             <div className="flex gap-3">
               <Button onClick={() => setClearConfirm(false)} variant="outline" className="flex-1">Batal</Button>
-              <Button onClick={() => { setClearConfirm(false); setClearConfirm2(true) }}
+              <Button onClick={() => { setClearConfirm(false); setClearError(''); setClearConfirm2(true) }}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white">Ya, Hapus Semua</Button>
             </div>
           </div>

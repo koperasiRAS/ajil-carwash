@@ -23,6 +23,14 @@ interface Transaction {
 
 const PER_PAGE = 20
 
+// Sliding window pagination: shows up to 5 pages centred around current
+function getPageRange(current: number, total: number) {
+  let start = Math.max(1, current - 2)
+  let end = Math.min(total, start + 4)
+  if (end - start < 4) start = Math.max(1, end - 4)
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+}
+
 export default function TransactionsPage() {
   const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10) })
   const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10))
@@ -261,11 +269,11 @@ export default function TransactionsPage() {
                 className="w-8 h-8 rounded text-xs text-muted-foreground hover:bg-accent disabled:opacity-30 transition-colors">
                 <ChevronLeft className="w-4 h-4 mx-auto" />
               </button>
-              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => (
-                <button key={i + 1} onClick={() => setPage(i + 1)}
+              {getPageRange(page, totalPages).map((p) => (
+                <button key={p} onClick={() => setPage(p)}
                   className={`w-8 h-8 rounded text-xs font-medium transition-colors ${
-                    page === i + 1 ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
-                  }`}>{i + 1}</button>
+                    page === p ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
+                  }`}>{p}</button>
               ))}
               <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page === totalPages}
                 className="w-8 h-8 rounded text-xs text-muted-foreground hover:bg-accent disabled:opacity-30 transition-colors">

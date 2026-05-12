@@ -23,9 +23,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params
     const body = await request.json()
-    const reason = body.reason as string
+    const reason = (body.reason as string ?? '').trim()
 
-    if (!reason || reason.length < 20) {
+    if (reason.length < 20) {
       return NextResponse.json({ error: 'Alasan void minimal 20 karakter.' }, { status: 400 })
     }
 
