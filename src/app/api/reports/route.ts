@@ -183,7 +183,7 @@ export async function GET(request: NextRequest) {
       summary: {
         omzetKotor,
         totalDiskon,
-        omzetBersih: omzetKotor,
+        omzetBersih: omzetKotor - totalDiskon,
         totalTx: completed.length,
         totalVoid: voided.length,
         avgPerTx: avgTx,

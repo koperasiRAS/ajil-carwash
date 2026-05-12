@@ -28,11 +28,12 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    const count = await prisma.transaction.count()
-
-    await prisma.$transaction(async (tx) => {
-      await tx.transactionItem.deleteMany({})
+    // Delete all transactions in a single transaction
+    // TransactionItems will cascade delete automatically (onDelete: Cascade in schema)
+    const count = await prisma.$transaction(async (tx) => {
+      const n = await tx.transaction.count()
       await tx.transaction.deleteMany({})
+      return n
     })
 
     logger.info('All transactions cleared', { count, userId: session.userId })
@@ -44,9 +45,9 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: `${count} transaksi berhasil dihapus.` })
   } catch (error) {
-    logger.error('Clear all transactions error', { error: String(error) })
+    logger.error('Clear all transactions error', { error: String(error), userId: session?.userId })
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Gagal menghapus data transaksi. Pastikan tidak ada proses lain yang sedang mengakses data.' },
       { status: 500 }
     )
   }
